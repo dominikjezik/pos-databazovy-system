@@ -484,6 +484,8 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
             header.push_back(row.getName());
         }
     } else {
+
+        // TODO: Zoradenie stlpcov podla poradia v columns
         for (const auto& column : columns) {
             header.push_back(column);
         }
