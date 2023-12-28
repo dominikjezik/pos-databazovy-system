@@ -5,6 +5,23 @@
 #include <string>
 #include <vector>
 
+class TableItem {
+private:
+    std::string name;
+    std::string owner;
+public:
+    TableItem(std::string name, std::string owner): name(name), owner(owner) {
+    }
+
+    std::string getName() {
+        return this->name;
+    }
+
+    std::string getOwner() {
+        return this->owner;
+    }
+};
+
 enum RowDataType {
     type_string,
     type_int,
@@ -32,7 +49,6 @@ public:
         return this->nullable;
     }
 };
-
 
 class TableScheme {
 private:
@@ -80,5 +96,35 @@ public:
     }
 };
 
+enum ConditionOperation {
+    equal,
+    not_equal,
+    greater_than,
+    less_than,
+    greater_than_or_equal,
+    less_than_or_equal
+};
+
+class Condition {
+private:
+    std::string column;
+    std::string value;
+    ConditionOperation operation;
+public:
+    Condition(std::string column, std::string value, ConditionOperation operation): column(column), value(value), operation(operation) {
+    }
+
+    std::string getColumn() {
+        return this->column;
+    }
+
+    std::string getValue() {
+        return this->value;
+    }
+
+    ConditionOperation getOperation() {
+        return this->operation;
+    }
+};
 
 #endif //DATABAZOVY_SYSTEM_TABLEROW_H

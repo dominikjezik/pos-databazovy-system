@@ -4,6 +4,9 @@
 DBMS::DBMS() {
     this->fileManager = new FileManager("../data");
 
+    // Vygeneruj subory ak neexistuju
+    this->fileManager->createInitialFilesIfNotExists();
+
     // Nacitaj pouzivatelov zo suboru
     this->fileManager->loadUsers(this->users);
 
@@ -18,6 +21,11 @@ DBMS::~DBMS() {
     for (auto user : this->users)
     {
         delete user;
+    }
+
+    for (auto table : this->tables)
+    {
+        delete table;
     }
 }
 
@@ -75,6 +83,40 @@ bool DBMS::createUser(std::string username, std::string password) {
 
 
 /**
+ * Metoda na ziskanie zoznamu pouzivatelov.
+ *
+ * @return usernames
+ */
+std::vector<std::string> DBMS::getUsersList() {
+    std::vector<std::string> usernames;
+
+    usernames.reserve(this->users.size());
+    for (auto user : this->users) {
+        usernames.push_back(user->getUsername());
+    }
+
+    return usernames;
+}
+
+
+/**
+ * Metoda na kontrolu ci uzivatel existuje.
+ *
+ * @param username
+ * @return exists
+ */
+bool DBMS::userExists(std::string username) {
+    for (auto user : this->users) {
+        if (user->getUsername() == username) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
+/**
  * Metoda na vytvorenie tabulky.
  *
  * Skontroluje ci tabulka uz existuje. Ak nie,
@@ -119,7 +161,8 @@ bool DBMS::createTable(TableScheme* tableScheme) {
     this->fileManager->createTable(tableScheme);
 
     // Pridaj tabulku do zoznamu tabuliek
-    this->tables.push_back(tableScheme->getName());
+    auto table = new TableItem(tableScheme->getName(), tableScheme->getOwner());
+    this->tables.push_back(table);
 
     return true;
 }
@@ -153,11 +196,47 @@ void DBMS::dropTable(std::string tableName, std::string username) {
 
     // Vymazanie tabulky zo zoznamu tabuliek
     for (int i = 0; i < this->tables.size(); i++) {
-        if (this->tables[i] == tableName) {
+        if (this->tables[i]->getName() == tableName) {
             this->tables.erase(this->tables.begin() + i);
             break;
         }
     }
+}
+
+
+/**
+ * Metoda na ziskanie zoznamu tabuliek.
+ *
+ * @return tables
+ */
+std::vector<std::string> DBMS::getTablesList() {
+    std::vector<std::string> tableNames;
+
+    tables.reserve(this->tables.size());
+    for (auto table : this->tables) {
+        tableNames.push_back(table->getName());
+    }
+
+    return tableNames;
+}
+
+
+/**
+ * Metoda na ziskanie zoznamu tabuliek vytvorenych danym uzivatelom.
+ *
+ * @param username
+ * @return tables
+ */
+std::vector<std::string> DBMS::getTablesListCreatedByUser(const std::string& username) {
+    std::vector<std::string> tableNames;
+
+    for (auto table : this->tables) {
+        if (table->getOwner() == username) {
+            tableNames.push_back(table->getName());
+        }
+    }
+
+    return tableNames;
 }
 
 
@@ -241,6 +320,182 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
 }
 
 
+/**
+ * Metoda na vyber zaznamov z tabulky. (SELECT)
+ *
+ * @param tableName
+ * @param columns
+ * @param conditions
+ * @param currentUser
+ * @return
+ */
+std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableName, std::vector<std::string> columns, std::vector<Condition> conditions, std::string orderColumn, bool ascending, std::string currentUser) {
+    // Kontrola ci tabulka existuje v zozname tabuliek
+    if (!this->tableExists(tableName)) {
+        throw std::invalid_argument("Tabulka neexistuje!");
+    }
+
+    // TODO: Kontrola opravnenia
+
+    // Ziskanie schemy tabulky
+    auto tableScheme = this->fileManager->loadTableScheme(tableName);
+
+    // Kontrolora ci vybrane stlpce existuju
+    for (auto column : columns) {
+        bool columnExists = false;
+
+        for (auto row : tableScheme->getRows()) {
+            if (row.getName() == column) {
+                columnExists = true;
+                break;
+            }
+        }
+
+        if (!columnExists) {
+            throw std::invalid_argument("Stlpec " + column + " neexistuje!");
+        }
+    }
+
+    // Ziskanie dat tabulky
+    auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+
+    // Prefiltrovanie zaznamov podla podmienok
+    for (auto condition : conditions) {
+        // Kontrola ci stlpec z podmienky existuje
+        bool columnExists = false;
+        int columnIndex = 0;
+
+        for (int i = 0; i < tableScheme->getRows().size(); i++) {
+            auto row = tableScheme->getRows()[i];
+
+            if (row.getName() == condition.getColumn()) {
+                columnExists = true;
+                columnIndex = i;
+                break;
+            }
+        }
+
+        if (!columnExists) {
+            throw std::invalid_argument("Stlpec " + condition.getColumn() + " neexistuje!");
+        }
+
+        // Filtracia zaznamov
+        for (int i = 0; i < rows.size(); i++) {
+            auto row = rows[i];
+
+            switch (condition.getOperation()) {
+                case equal:
+                    if (row[columnIndex] != condition.getValue()) {
+                        rows.erase(rows.begin() + i);
+                        i--;
+                    }
+                    break;
+                case not_equal:
+                    if (row[columnIndex] == condition.getValue()) {
+                        rows.erase(rows.begin() + i);
+                        i--;
+                    }
+                    break;
+                case greater_than:
+                    if (row[columnIndex] <= condition.getValue()) {
+                        rows.erase(rows.begin() + i);
+                        i--;
+                    }
+                    break;
+                case less_than:
+                    if (row[columnIndex] >= condition.getValue()) {
+                        rows.erase(rows.begin() + i);
+                        i--;
+                    }
+                    break;
+                case greater_than_or_equal:
+                    if (row[columnIndex] < condition.getValue()) {
+                        rows.erase(rows.begin() + i);
+                        i--;
+                    }
+                    break;
+                case less_than_or_equal:
+                    if (row[columnIndex] > condition.getValue()) {
+                        rows.erase(rows.begin() + i);
+                        i--;
+                    }
+                    break;
+            }
+        }
+    }
+
+
+    // Zoradenie zaznamov
+    if (!orderColumn.empty()) {
+        // Kontrola ci stlpec z podmienky existuje
+        bool columnExists = false;
+        int columnIndex = 0;
+
+        for (int i = 0; i < tableScheme->getRows().size(); i++) {
+            auto row = tableScheme->getRows()[i];
+
+            if (row.getName() == orderColumn) {
+                columnExists = true;
+                columnIndex = i;
+                break;
+            }
+        }
+
+        if (!columnExists) {
+            throw std::invalid_argument("Stlpec " + orderColumn + " neexistuje!");
+        }
+
+        // Zoradenie zaznamov
+        std::sort(rows.begin(), rows.end(), [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+            if (ascending) {
+                return a[columnIndex] < b[columnIndex];
+            } else {
+                return a[columnIndex] > b[columnIndex];
+            }
+        });
+    }
+
+    // Odstranenie nepotrebnych stlpcov
+    if (columns.size() != 0) {
+
+        std::vector<int> columnsToRemove;
+
+        for (int i = 0; i < tableScheme->getRows().size(); i++) {
+            auto row = tableScheme->getRows()[i];
+
+            if (std::find(columns.begin(), columns.end(), row.getName()) == columns.end()) {
+                columnsToRemove.push_back(i);
+            }
+        }
+
+        for (int i = 0; i < rows.size(); i++) {
+            for (int j = 0; j < columnsToRemove.size(); j++) {
+                rows[i].erase(rows[i].begin() + columnsToRemove[j] - j);
+            }
+        }
+    }
+
+
+    // Pridanie hlavicky tabulky
+    std::vector<std::string> header;
+
+    if (columns.empty()) {
+        for (auto row : tableScheme->getRows()) {
+            header.push_back(row.getName());
+        }
+    } else {
+        for (const auto& column : columns) {
+            header.push_back(column);
+        }
+    }
+
+    rows.insert(rows.begin(), header);
+
+    return rows;
+}
+
+
+
 
 
 void DBMS::TEST_printState() {
@@ -253,14 +508,14 @@ void DBMS::TEST_printState() {
     // Vypis tabuliek
     std::cout << "*** Tabulky ***" << std::endl;
     for (auto table : this->tables) {
-        std::cout << table << std::endl;
+        std::cout << table->getName() << " : " << table->getOwner() << std::endl;
     }
 }
 
 
 bool DBMS::tableExists(const std::string& tableName) {
     for (const auto& table : this->tables) {
-        if (table == tableName) {
+        if (table->getName() == tableName) {
             return true;
         }
     }

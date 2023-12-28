@@ -6,6 +6,8 @@
 #include "User.h"
 #include "CsvManager.h"
 #include <iostream>
+#include <filesystem>
+#include <utility>
 
 class FileManager {
 private:
@@ -19,7 +21,7 @@ public:
     void loadUsers(std::vector<User*>& users);
     void saveUser(User *user);
 
-    void loadTablesList(std::vector<std::string>& tables);
+    void loadTablesList(std::vector<TableItem*>& table);
     TableScheme* loadTableScheme(std::string tableName);
 
     void createTable(TableScheme *tableScheme);
@@ -28,6 +30,8 @@ public:
     void insertIntoTable(const std::string& tableName, const std::string& row);
 
     std::vector<std::vector<std::string>> loadTableData(std::string tableName, int numberOfColumns);
+
+    void createInitialFilesIfNotExists();
 };
 
 

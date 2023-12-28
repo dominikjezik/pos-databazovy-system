@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 project(databazovy_system)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 
 add_executable(databazovy_system main.cpp
         src/FileManager.cpp
@@ -11,4 +11,6 @@ add_executable(databazovy_system main.cpp
         src/Table.h
         src/User.h
         src/CsvManager.cpp
-        src/CsvManager.h)
+        src/CsvManager.h
+        src/Interpreter.cpp
+        src/Interpreter.h)
