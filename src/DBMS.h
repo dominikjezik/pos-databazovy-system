@@ -19,6 +19,8 @@ private:
 
     bool tableExists(const std::string& tableName);
     bool dataTypeCheck(std::string value, RowDataType type);
+
+    void filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *tableScheme, std::vector<Condition> conditions);
 public:
     DBMS();
     ~DBMS();
