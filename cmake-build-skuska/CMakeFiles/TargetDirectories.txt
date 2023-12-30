@@ -1,0 +1,3 @@
+/tmp/tmp.LaQFvNPi7i/cmake-build-skuska/CMakeFiles/edit_cache.dir
+/tmp/tmp.LaQFvNPi7i/cmake-build-skuska/CMakeFiles/rebuild_cache.dir
+/tmp/tmp.LaQFvNPi7i/cmake-build-skuska/CMakeFiles/databazovy_system.dir
