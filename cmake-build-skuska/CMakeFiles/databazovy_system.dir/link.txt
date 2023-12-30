@@ -1,1 +1,0 @@
-/usr/bin/c++ -g -rdynamic CMakeFiles/databazovy_system.dir/main.cpp.o CMakeFiles/databazovy_system.dir/src/FileManager.cpp.o CMakeFiles/databazovy_system.dir/src/DBMS.cpp.o CMakeFiles/databazovy_system.dir/src/Interpreter.cpp.o CMakeFiles/databazovy_system.dir/src/CsvManager.cpp.o -o databazovy_system 

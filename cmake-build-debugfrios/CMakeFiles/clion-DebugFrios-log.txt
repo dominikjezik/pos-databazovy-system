@@ -1,4 +1,0 @@
-/usr/bin/cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" -S /tmp/tmp.LaQFvNPi7i -B /tmp/tmp.LaQFvNPi7i/cmake-build-debugfrios
--- Configuring done
--- Generating done
--- Build files have been written to: /tmp/tmp.LaQFvNPi7i/cmake-build-debugfrios

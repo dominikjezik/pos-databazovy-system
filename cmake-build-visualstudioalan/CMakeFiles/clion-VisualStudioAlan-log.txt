@@ -1,4 +1,0 @@
-"D:\PROGRAM FILES - Installed\CLion 2023.2.2\bin\cmake\win\x64\bin\cmake.exe" -DCMAKE_BUILD_TYPE=Release "-DCMAKE_MAKE_PROGRAM=D:/PROGRAM FILES - Installed/CLion 2023.2.2/bin/ninja/win/x64/ninja.exe" -G Ninja -S C:\Users\Alan\projectsOfProgramming\CLion\pos\pos-databazovy-system -B C:\Users\Alan\projectsOfProgramming\CLion\pos\pos-databazovy-system\cmake-build-visualstudioalan
--- Configuring done (2.2s)
--- Generating done (0.4s)
--- Build files have been written to: C:/Users/Alan/projectsOfProgramming/CLion/pos/pos-databazovy-system/cmake-build-visualstudioalan

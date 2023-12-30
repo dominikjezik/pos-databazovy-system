@@ -1,6 +1,0 @@
-# ninja log v5
-0	3852	7255759600557667	CMakeFiles/databazovy_system.dir/src/FileManager.cpp.obj	14c9a9eea104d3ee
-176	4433	7255759602037574	CMakeFiles/databazovy_system.dir/src/CsvManager.cpp.obj	48e8de35c17815af
-20	4434	7255759602767666	CMakeFiles/databazovy_system.dir/main.cpp.obj	165e4167f87d5d9b
-172	4435	7255759608127987	CMakeFiles/databazovy_system.dir/src/Interpreter.cpp.obj	4b45d5115802c5e2
-120	4479	7255759610907594	CMakeFiles/databazovy_system.dir/src/DBMS.cpp.obj	ce2f799de1038799
