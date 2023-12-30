@@ -40,12 +40,34 @@ private:
 public:
     TableRowScheme(std::string name, RowDataType dataType, bool nullable): name(name), dataType(dataType), nullable(nullable) {
     }
+
+    TableRowScheme(std::string name, std::string dataType, bool nullable) {
+        this->name = name;
+        this->nullable = nullable;
+
+        if (dataType == "string") {
+            this->dataType = type_string;
+        } else if (dataType == "int") {
+            this->dataType = type_int;
+        } else if (dataType == "double") {
+            this->dataType = type_double;
+        } else if (dataType == "boolean") {
+            this->dataType = type_boolean;
+        } else if (dataType == "date") {
+            this->dataType = type_date;
+        } else {
+            throw std::invalid_argument("Neplatny datovy typ!");
+        }
+    }
+
     std::string getName() {
         return this->name;
     }
+
     RowDataType getDataType() {
         return this->dataType;
     }
+
     bool isNullable() {
         return this->nullable;
     }
@@ -64,8 +86,15 @@ public:
     TableScheme(std::string name, std::string owner, std::string primaryKey): name(name), owner(owner), primaryKey(primaryKey) {
     }
 
-    void addRow(const TableRowScheme& row) {
-        this->rows.push_back(row);
+    void addRow(TableRowScheme newRow) {
+        // Kontrola, ci sa v scheme nenachadza uz rovnaky stlpec
+        for (auto row : this->rows) {
+            if (row.getName() == newRow.getName()) {
+                throw std::invalid_argument("Stlpec s nazvom \"" + row.getName() + "\" uz existuje!");
+            }
+        }
+
+        this->rows.push_back(newRow);
     }
 
     std::string getName() {

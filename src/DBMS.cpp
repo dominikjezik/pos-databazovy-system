@@ -126,22 +126,22 @@ bool DBMS::userExists(std::string username) {
  * @param tableScheme
  * @return created
  */
-bool DBMS::createTable(TableScheme* tableScheme) {
+void DBMS::createTable(TableScheme& tableScheme) {
     // Kontrola ci tabulka existuje v zozname tabuliek
-    if (this->tableExists(tableScheme->getName())) {
-        return false;
+    if (this->tableExists(tableScheme.getName())) {
+        throw std::invalid_argument("Tabulka uz existuje!");
     }
 
     // Kontrola ci obsahuje primarny kluc
-    if (tableScheme->getPrimaryKey() == "") {
+    if (tableScheme.getPrimaryKey() == "") {
         throw std::invalid_argument("Tabulka musi obsahovat primarny kluc!");
     }
 
     // Kontrola ci je zadany primarny kluc v tabulke a ci je nie je nullable
     bool primaryKeyExists = false;
 
-    for (auto row : tableScheme->getRows()) {
-        if (row.getName() == tableScheme->getPrimaryKey()) {
+    for (auto row : tableScheme.getRows()) {
+        if (row.getName() == tableScheme.getPrimaryKey()) {
             primaryKeyExists = true;
 
             if (row.isNullable()) {
@@ -161,10 +161,8 @@ bool DBMS::createTable(TableScheme* tableScheme) {
     this->fileManager->createTable(tableScheme);
 
     // Pridaj tabulku do zoznamu tabuliek
-    auto table = new TableItem(tableScheme->getName(), tableScheme->getOwner());
+    auto table = new TableItem(tableScheme.getName(), tableScheme.getOwner());
     this->tables.push_back(table);
-
-    return true;
 }
 
 
@@ -192,7 +190,7 @@ void DBMS::dropTable(std::string tableName, std::string username) {
     }
 
     // Vymazanie tabulky zo suboru
-    this->fileManager->dropTable(tableName);
+    this->fileManager->dropTable(tableName, tableScheme->getOwner());
 
     // Vymazanie tabulky zo zoznamu tabuliek
     for (int i = 0; i < this->tables.size(); i++) {
@@ -275,7 +273,7 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
             if (row.getName() == keyValue.first) {
                 columnExists = true;
 
-                this->dataTypeCheck(keyValue.second, row.getDataType());
+                this->dataTypeCheck(keyValue.second, row.getDataType(), row.isNullable());
 
                 if (row.getName() == tableScheme->getPrimaryKey()) {
                     primaryKeyValue = keyValue.second;
@@ -324,6 +322,40 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
     // Zapis riadku do suboru
     this->fileManager->insertIntoTable(tableName, csvRow);
 }
+
+
+/**
+ * Metoda na vymazanie zaznamov z tabulky. (DELETE FROM)
+ *
+ * @param tableName
+ * @param conditions
+ * @param currentUser
+ * @return
+ */
+size_t DBMS::deleteFromTable(std::string tableName, std::vector<Condition> conditions, std::string currentUser) {
+    // Kontrola ci tabulka existuje v zozname tabuliek
+    if (!this->tableExists(tableName)) {
+        throw std::invalid_argument("Tabulka neexistuje!");
+    }
+
+    // TODO: Kontrola opravnenia
+
+    // Ziskanie schemy tabulky
+    auto tableScheme = this->fileManager->loadTableScheme(tableName);
+
+    // Ziskanie dat tabulky
+    auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+
+    // Prefiltrovanie zaznamov podla podmienok
+    std::vector<std::vector<std::string>> filteredOutRows;
+    this->filterOutRows(rows, filteredOutRows, tableScheme, conditions);
+
+    // Vymazanie odfiltrovanych zaznamov zo suboru
+    this->fileManager->saveTableData(tableName, filteredOutRows);
+
+    return rows.size();
+}
+
 
 
 /**
@@ -474,7 +506,15 @@ bool DBMS::tableExists(const std::string& tableName) {
 }
 
 
-bool DBMS::dataTypeCheck(std::string value, RowDataType type) {
+bool DBMS::dataTypeCheck(std::string value, RowDataType type, bool isNullable) {
+    if (value == "" && isNullable) {
+        return true;
+    }
+
+    if (value == "" && !isNullable && type != type_string) {
+        throw std::invalid_argument("Hodnota nemoze byt NULL!");
+    }
+
     switch (type) {
         case type_int:
             try {
@@ -513,13 +553,30 @@ bool DBMS::dataTypeCheck(std::string value, RowDataType type) {
 
 
 /**
- * Metoda na filtrovanie zaznamov podla podmienok.
+ * Metoda na filtrovanie zaznamov podla podmienok, pricom zaznamy zoberie
+ * zo vstupneho vektora a vystupne zaznamy ulozi do tohto vektora.
  *
  * @param rows
  * @param tableScheme
  * @param conditions
  */
 void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *tableScheme, std::vector<Condition> conditions) {
+    std::vector<std::vector<std::string>> filteredOutRows;
+    this->filterOutRows(rows, filteredOutRows, tableScheme, conditions);
+}
+
+
+/**
+ * Metoda na filtrovanie zaznamov podla podmienok, pricom zaznamy zoberie
+ * zo vstupneho vektora a vystupne zaznamy ulozi do tohto vektora a
+ * zaznamy ktore nesplnaju podmienky ulozi do vystupneho vektora.
+ *
+ * @param rows
+ * @param filteredOutRows
+ * @param tableScheme
+ * @param conditions
+ */
+void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vector<std::vector<std::string>>& filteredOutRows, TableScheme *tableScheme, std::vector<Condition> conditions) {
     // Cez cyklus prejdeme vsetky zadane podmienky
     for (auto condition : conditions) {
         // Kontrola ci stlpec z podmienky existuje
@@ -579,6 +636,7 @@ void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *
                 }
 
                 if (!isOk) {
+                    filteredOutRows.push_back(row);
                     rows.erase(rows.begin() + i);
                     i--;
                 }
@@ -621,6 +679,7 @@ void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *
                 }
 
                 if (!isOk) {
+                    filteredOutRows.push_back(row);
                     rows.erase(rows.begin() + i);
                     i--;
                 }
@@ -633,6 +692,7 @@ void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *
                 auto isOk = Condition::compareString(row[columnIndex], condition.getValue(), condition.getOperation());
 
                 if (!isOk) {
+                    filteredOutRows.push_back(row);
                     rows.erase(rows.begin() + i);
                     i--;
                 }
@@ -645,6 +705,7 @@ void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *
                 auto isOk = Condition::compareDate(row[columnIndex], condition.getValue(), condition.getOperation());
 
                 if (!isOk) {
+                    filteredOutRows.push_back(row);
                     rows.erase(rows.begin() + i);
                     i--;
                 }
@@ -688,14 +749,12 @@ void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *
                 }
 
                 if (!isOk) {
+                    filteredOutRows.push_back(row);
                     rows.erase(rows.begin() + i);
                     i--;
                 }
             }
         }
     }
-
-
 }
-
 

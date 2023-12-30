@@ -46,27 +46,27 @@ TableScheme *FileManager::loadTableScheme(std::string tableName) {
 }
 
 
-void FileManager::createTable(TableScheme *tableScheme) {
+void FileManager::createTable(TableScheme& tableScheme) {
     // zapis nazov tabulky do suboru s tabulkami
-    csvManager.appendToFile(this->basePath + "/tables.csv", tableScheme->getName() + ";" + tableScheme->getOwner());
+    csvManager.appendToFile(this->basePath + "/tables.csv", tableScheme.getName() + ";" + tableScheme.getOwner());
 
     // vytvor subor kde je schéma tabulky
-    csvManager.createFile(this->basePath + "/tables/" + tableScheme->getName() + "_scheme.csv", [&](std::fstream& file){
-        file << tableScheme->getOwner() << ";" << tableScheme->getPrimaryKey() << std::endl;
+    csvManager.createFile(this->basePath + "/tables/" + tableScheme.getName() + "_scheme.csv", [&](std::fstream& file){
+        file << tableScheme.getOwner() << ";" << tableScheme.getPrimaryKey() << std::endl;
 
-        for (auto row : tableScheme->getRows()) {
+        for (auto row : tableScheme.getRows()) {
             file << row.getName() << ";" << row.getDataType() << ";" << row.isNullable() << std::endl;
         }
     });
 
     // vytvor subor kde su data tabulky
-    csvManager.createFile(this->basePath + "/tables/" + tableScheme->getName() + "_data.csv", [&](std::fstream& file){ });
+    csvManager.createFile(this->basePath + "/tables/" + tableScheme.getName() + "_data.csv", [&](std::fstream& file){ });
 }
 
 
-void FileManager::dropTable(std::string tableName) {
+void FileManager::dropTable(std::string tableName, std::string owner) {
     // Vymaz nazov tabulky zo suboru s tabulkami
-    csvManager.removeLineFromFile(this->basePath + "/tables.csv", tableName);
+    csvManager.removeLineFromFile(this->basePath + "/tables.csv", tableName + ";" + owner);
 
     // Vymaz subor so schemou tabulky
     if(std::remove((this->basePath + "/tables/" + tableName + "_scheme.csv").c_str()) != 0) {
@@ -121,6 +121,24 @@ void FileManager::createInitialFilesIfNotExists() {
 }
 
 
+void FileManager::saveTableData(std::string tableName, std::vector<std::vector<std::string>> data) {
+    csvManager.createFile(this->basePath + "/tables/" + tableName + "_data.csv", [&](std::fstream& file){
+        for (auto row : data) {
+            for (int i = 0; i < row.size(); i++) {
+                file << row[i];
+
+                if (i != row.size() - 1) {
+                    file << ";";
+                }
+            }
+
+            file << std::endl;
+        }
+    });
+}
+
+
+
 void FileManager::createFileIfNotExists(const std::string& filename) {
     std::fstream file(filename, std::ios::in);
 
@@ -129,4 +147,5 @@ void FileManager::createFileIfNotExists(const std::string& filename) {
         file.close();
     }
 }
+
 

@@ -24,12 +24,12 @@ public:
     void loadTablesList(std::vector<TableItem*>& table);
     TableScheme* loadTableScheme(std::string tableName);
 
-    void createTable(TableScheme *tableScheme);
-    void dropTable(std::string tableName);
+    void createTable(TableScheme& tableScheme);
+    void dropTable(std::string tableName, std::string owner);
 
     void insertIntoTable(const std::string& tableName, const std::string& row);
-
     std::vector<std::vector<std::string>> loadTableData(std::string tableName, int numberOfColumns);
+    void saveTableData(std::string tableName, std::vector<std::vector<std::string>> data);
 
     void createInitialFilesIfNotExists();
 };

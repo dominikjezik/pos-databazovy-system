@@ -79,6 +79,26 @@ void CsvManager::removeLineFromFile(const std::string &filename, const std::stri
     file.close();
 }
 
+
+void CsvManager::replaceFileContent(const std::string &filename, const std::vector<std::vector<std::string>>& data) {
+    std::ofstream file(filename, std::ios::app);
+
+    for (auto row : data) {
+        for (int i = 0; i < row.size(); i++) {
+            file << row[i];
+
+            if (i != row.size() - 1) {
+                file << ";";
+            }
+        }
+
+        file << std::endl;
+    }
+
+    file.close();
+}
+
+
 std::string* CsvManager::parseLine(const std::string& line, int numberOfSegments) {
     std::stringstream streamLine(line);
 

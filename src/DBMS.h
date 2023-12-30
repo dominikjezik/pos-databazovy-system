@@ -18,9 +18,10 @@ private:
     std::vector<TableItem*> tables;
 
     bool tableExists(const std::string& tableName);
-    bool dataTypeCheck(std::string value, RowDataType type);
+    bool dataTypeCheck(std::string value, RowDataType type, bool isNullable);
 
     void filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *tableScheme, std::vector<Condition> conditions);
+    void filterOutRows(std::vector<std::vector<std::string>>& rows, std::vector<std::vector<std::string>>& filteredOutRows, TableScheme *tableScheme, std::vector<Condition> conditions);
 public:
     DBMS();
     ~DBMS();
@@ -36,7 +37,7 @@ public:
     // TODO: bool revokePermission(std::string targetUser, std::string tableName, std::string permission, std::string currentUser);
 
     // Table management
-    bool createTable(TableScheme* tableScheme);
+    void createTable(TableScheme& tableScheme);
     void dropTable(std::string tableName, std::string currentUser);
     std::vector<std::string> getTablesList();
     std::vector<std::string> getTablesListCreatedByUser(const std::string& username);
@@ -45,7 +46,7 @@ public:
     // Data management
     void insertIntoTable(std::string tableName, std::map<std::string, std::string> newRecord, std::string currentUser);
     // TODO: Update
-    // TODO: Delete
+    size_t deleteFromTable(std::string tableName, std::vector<Condition> conditions, std::string currentUser);
 
     std::vector<std::vector<std::string>> selectFromTable(std::string tableName, std::vector<std::string> columns, std::vector<Condition> conditions, std::string orderColumn, bool ascending, std::string currentUser);
 
