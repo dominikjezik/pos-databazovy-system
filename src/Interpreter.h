@@ -3,6 +3,7 @@
 
 
 #include "DBMS.h"
+#include <sstream>
 
 class Interpreter {
 private:

@@ -10,7 +10,9 @@ add_executable(databazovy_system main.cpp
         src/DBMS.h
         src/Table.h
         src/User.h
-        src/CsvManager.cpp
-        src/CsvManager.h
+        src/Interpreter.h
         src/Interpreter.cpp
-        src/Interpreter.h)
+        src/CsvManager.cpp
+        src/CsvManager.h)
+
+target_link_libraries(databazovy_system pthread)
