@@ -4,6 +4,7 @@
 
 #include <string>
 #include <vector>
+#include <stdexcept>
 
 class TableItem {
 private:
@@ -125,6 +126,98 @@ public:
     ConditionOperation getOperation() {
         return this->operation;
     }
+
+    static bool compareInt(int a, int b, ConditionOperation operation) {
+        switch (operation) {
+            case equal:
+                return a == b;
+            case not_equal:
+                return a != b;
+            case greater_than:
+                return a > b;
+            case less_than:
+                return a < b;
+            case greater_than_or_equal:
+                return a >= b;
+            case less_than_or_equal:
+                return a <= b;
+        }
+    }
+
+    static bool compareNull(std::string a, std::string b, ConditionOperation operation) {
+        switch (operation) {
+            case equal:
+                return a == b;
+            case not_equal:
+                return a != b;
+            case greater_than:
+            case less_than:
+            case greater_than_or_equal:
+            case less_than_or_equal:
+                throw std::invalid_argument("Nullable je mozne porovnat iba cez operaciu \"=\" alebo \"!=\"!");
+        }
+    }
+
+    static bool compareDouble(double a, double b, ConditionOperation operation) {
+        switch (operation) {
+            case equal:
+                return a == b;
+            case not_equal:
+                return a != b;
+            case greater_than:
+                return a > b;
+            case less_than:
+                return a < b;
+            case greater_than_or_equal:
+                return a >= b;
+            case less_than_or_equal:
+                return a <= b;
+        }
+    }
+
+    static bool compareString(std::string a, std::string b, ConditionOperation operation) {
+        switch (operation) {
+            case equal:
+                return a == b;
+            case not_equal:
+                return a != b;
+            case greater_than:
+            case less_than:
+            case greater_than_or_equal:
+            case less_than_or_equal:
+                throw std::invalid_argument("Hodnota typu string moze byt porovnana iba cez operaciu \"=\" alebo \"!=\"!");
+        }
+    }
+
+    static bool compareDate(std::string a, std::string b, ConditionOperation operation) {
+        switch (operation) {
+            case equal:
+                return a == b;
+            case not_equal:
+                return a != b;
+            case greater_than:
+            case less_than:
+            case greater_than_or_equal:
+            case less_than_or_equal:
+                throw std::invalid_argument("Hodnota typu date moze byt porovnana iba cez operaciu \"=\" alebo \"!=\"!");
+        }
+    }
+
+    static bool compareBoolean(bool a, bool b, ConditionOperation operation) {
+        switch (operation) {
+            case equal:
+                return a == b;
+            case not_equal:
+                return a != b;
+            case greater_than:
+            case less_than:
+            case greater_than_or_equal:
+            case less_than_or_equal:
+                throw std::invalid_argument("Hodnota typu boolean moze byt porovnana iba cez operaciu \"=\" alebo \"!=\"!");
+        }
+    }
+
+
 };
 
 #endif //DATABAZOVY_SYSTEM_TABLEROW_H

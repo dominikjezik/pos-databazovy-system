@@ -4,7 +4,11 @@
 #include "src/Interpreter.h"
 
 void vypisLogo();
-void vytvorTestovaciuTabulku(DBMS &dbms);
+void vytvorTestovaciuTabulkuPostov(DBMS &dbms);
+void naplnTestovaciuTabulkuPostov(Interpreter& interpreter);
+void vytvorTestovaciuTabulkuDatovychTypov(DBMS& dbms);
+void vytvorTestovaciuTabulkuJednoduchu(DBMS& dbms);
+void vytvorTestovaciuTabulkuIntov(DBMS& dbms);
 void insert(DBMS& dbms);
 void select(DBMS& dbms);
 void vypisTabulky(DBMS& dbms);
@@ -34,7 +38,7 @@ int main() {
 
     DBMS dbms;
 
-    insert(dbms);
+    vytvorTestovaciuTabulkuIntov(dbms);
 
     dbms.TEST_printState();
 
@@ -54,9 +58,9 @@ void vypisTabulky(DBMS& dbms) {
 
 void insert(DBMS& dbms) {
     std::map<std::string, std::string> newRecord;
-    newRecord["id"] = "4";
-    newRecord["first_name"] = "Jane";
-    newRecord["last_name"] = "Doe";
+    newRecord["id"] = "6";
+    newRecord["first_name"] = "Nejake meno";
+    newRecord["last_name"] = "Test";
     newRecord["date_of_birth"] = "2004-03-03";
 
     dbms.insertIntoTable("users", newRecord, "jezik");
@@ -78,13 +82,13 @@ void select(DBMS& dbms) {
     std::cout << std::endl;
 }
 
-void vytvorTestovaciuTabulku(DBMS& dbms) {
-    auto tableScheme = new TableScheme("users", "admin", "id");
+void vytvorTestovaciuTabulkuPostov(DBMS& dbms) {
+    auto tableScheme = new TableScheme("posts", "admin", "id");
 
     auto row0 = new TableRowScheme("id", type_int, false);
-    auto row1 = new TableRowScheme("first_name", type_string, false);
-    auto row2 = new TableRowScheme("last_name", type_string, true);
-    auto row3 = new TableRowScheme("date_of_birth", type_date, true);
+    auto row1 = new TableRowScheme("title", type_string, false);
+    auto row2 = new TableRowScheme("content", type_string, true);
+    auto row3 = new TableRowScheme("date", type_date, true);
 
     tableScheme->addRow(*row0);
     tableScheme->addRow(*row1);
@@ -98,6 +102,72 @@ void vytvorTestovaciuTabulku(DBMS& dbms) {
     } else {
         std::cout << "Tabulka nebola vytvorena" << std::endl;
     }
+}
+
+void vytvorTestovaciuTabulkuJednoduchu(DBMS& dbms) {
+    auto tableScheme = new TableScheme("sample", "admin", "key");
+
+    auto row0 = new TableRowScheme("key", type_string, false);
+
+    tableScheme->addRow(*row0);
+
+    auto result = dbms.createTable(tableScheme);
+
+    if (result) {
+        std::cout << "Tabulka bola vytvorena" << std::endl;
+    } else {
+        std::cout << "Tabulka nebola vytvorena" << std::endl;
+    }
+}
+
+void vytvorTestovaciuTabulkuIntov(DBMS& dbms) {
+    auto tableScheme = new TableScheme("int", "admin", "key");
+
+    auto row0 = new TableRowScheme("key", type_int, false);
+    auto row1 = new TableRowScheme("int", type_int, true);
+
+    tableScheme->addRow(*row0);
+    tableScheme->addRow(*row1);
+
+    auto result = dbms.createTable(tableScheme);
+
+    if (result) {
+        std::cout << "Tabulka bola vytvorena" << std::endl;
+    } else {
+        std::cout << "Tabulka nebola vytvorena" << std::endl;
+    }
+}
+
+void vytvorTestovaciuTabulkuDatovychTypov(DBMS& dbms) {
+    auto tableScheme = new TableScheme("data", "admin", "int");
+
+    auto row0 = new TableRowScheme("int", type_int, false);
+    auto row1 = new TableRowScheme("string", type_string, true);
+    auto row2 = new TableRowScheme("double", type_double, true);
+    auto row3 = new TableRowScheme("boolean", type_boolean, true);
+    auto row4 = new TableRowScheme("date", type_date, true);
+
+    tableScheme->addRow(*row0);
+    tableScheme->addRow(*row1);
+    tableScheme->addRow(*row2);
+    tableScheme->addRow(*row3);
+    tableScheme->addRow(*row4);
+
+    auto result = dbms.createTable(tableScheme);
+
+    if (result) {
+        std::cout << "Tabulka bola vytvorena" << std::endl;
+    } else {
+        std::cout << "Tabulka nebola vytvorena" << std::endl;
+    }
+}
+
+void naplnTestovaciuTabulkuPostov(Interpreter& interpreter) {
+    interpreter.run("insert into posts (id title content date) values (1 \"Prvy post\" \"Toto je obsah prveho postu\" \"2020-03-03\")");
+    interpreter.run("insert into posts (id title content date) values (2 \"Druhy post\" \"Toto je obsah druheho postu\" \"2020-03-04\")");
+    interpreter.run("insert into posts (id title content date) values (3 \"Treti post\" \"Toto je obsah tretieho postu\" \"2020-03-05\")");
+    interpreter.run("insert into posts (id title content date) values (4 \"Stvrty post\" \"Toto je obsah stvrteho postu\" \"2020-03-06\")");
+    interpreter.run("insert into posts (id title content date) values (5 \"Piaty post\" \"Toto je obsah piateho postu\" \"2020-03-07\")");
 }
 
 void vypisLogo() {

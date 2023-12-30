@@ -24,13 +24,22 @@ void Interpreter::run(std::string command) {
     std::string commandName = words[0];
     words.erase(words.begin());
 
-    if (commandName == "show") {
-        this->show(words);
-    } else if (commandName == "select") {
-        this->select(words);
-    } else {
-        std::cout << "Neznamy prikaz!" << std::endl;
+    try {
+        if (commandName == "show") {
+            this->show(words);
+        } else if (commandName == "create") {
+            this->create(words);
+        } else if (commandName == "select") {
+            this->select(words);
+        }  else if (commandName == "insert") {
+            this->insert(words);
+        } else {
+            std::cout << "Neznamy prikaz!" << std::endl;
+        }
+    } catch (std::exception& e) {
+        std::cout << "Chyba v prikaze! Detaily: " << e.what() << std::endl;
     }
+
 }
 
 
@@ -258,25 +267,225 @@ void Interpreter::select(std::vector<std::string> words) {
 }
 
 
+void Interpreter::create(std::vector<std::string> words) {
+    if (words.empty()) {
+        std::cout << "Neznamy prikaz!" << std::endl;
+        return;
+    }
+
+    // CREATE USER username IDENTIFIED BY password
+    if (words[0] == "user") {
+        words.erase(words.begin());
+
+        if (words.size() != 4) {
+            std::cout << "Neznamy prikaz!" << std::endl;
+            return;
+        }
+
+        if (words[1] != "identified" || words[2] != "by") {
+            std::cout << "Neznamy prikaz!" << std::endl;
+            return;
+        }
+
+        if (this->dbms->userExists(words[0])) {
+            std::cout << "Pouzivatel " << words[0] << " uz existuje!" << std::endl;
+            return;
+        }
+
+        this->dbms->createUser(words[0], words[3]);
+
+        std::cout << "Pouzivatel " << words[1] << " bol vytvoreny!" << std::endl;
+    } else {
+        std::cout << "Neznamy prikaz!" << std::endl;
+    }
+
+}
+
+
+void Interpreter::insert(std::vector<std::string> words) {
+    if (words.empty()) {
+        std::cout << "Neznamy prikaz!" << std::endl;
+        return;
+    }
+
+    // INSERT INTO table_name (column1 column2 column3 ...) VALUES (value1 value2 value3 ...);
+    if (words[0] == "into") {
+        words.erase(words.begin());
+
+        if (words.size() < 4) {
+            std::cout << "Chyba v prikaze!" << std::endl;
+            return;
+        }
+
+        std::string tableName = words[0];
+        words.erase(words.begin());
+
+        // Kontrola ci zacina zatvorkou
+        if (words[0].size() == 0 || words[0][0] != '(') {
+            std::cout << "Chyba v prikaze!" << std::endl;
+            return;
+        }
+
+        // Odstran zatvorku
+        words[0].erase(words[0].begin());
+
+        if (words[0].size() == 0) {
+            words.erase(words.begin());
+        }
+
+        if (words[0].size() == 0) {
+            std::cout << "Chyba v prikaze!" << std::endl;
+            return;
+        }
+
+        std::vector<std::string> columns;
+
+        // Ziskaj nazvy stlpcov
+        while (words[0] != ")") {
+            // Ak slovo konci zatvorkou tak ju odstran
+            if (words[0].back() == ')') {
+                words[0].pop_back();
+                columns.push_back(words[0]);
+                break;
+            }
+
+            columns.push_back(words[0]);
+            words.erase(words.begin());
+
+            if (words.empty()) {
+                std::cout << "Chyba v prikaze!" << std::endl;
+                return;
+            }
+        }
+
+        // Odstanenie posledneho slova alebo zatvorky
+        words.erase(words.begin());
+
+        if (words[0] != "values") {
+            std::cout << "Chyba v prikaze" << std::endl;
+            return;
+        }
+
+        // Odstranenie slova values
+        words.erase(words.begin());
+
+        // TODO kontrola si ma slovo dlzku viac ako 0
+        // Kontrola ci zacina zatvorkou
+        if (words[0].size() == 0 || words[0][0] != '(') {
+            std::cout << "Chyba v prikaze!" << std::endl;
+            return;
+        }
+
+        // Odstran zatvorku
+        words[0].erase(words[0].begin());
+
+        if (words[0].size() == 0) {
+            words.erase(words.begin());
+        }
+
+        if (words[0].size() == 0) {
+            std::cout << "Chyba v prikaze!" << std::endl;
+            return;
+        }
+
+        std::map<std::string, std::string> values;
+
+        // Ziskaj hodnoty
+        while (words[0] != ")") {
+            // Ak je viac hodnot ako stlpcov tak vyhod chybu
+            if (columns.empty()) {
+                std::cout << "Chyba v prikaze!" << std::endl;
+                return;
+            }
+
+            // Ak slovo konci zatvorkou tak ju odstran
+            if (words[0].back() == ')') {
+                words[0].pop_back();
+
+                auto column = columns[0];
+                columns.erase(columns.begin());
+                values[column] = words[0];
+
+                break;
+            }
+
+            auto column = columns[0];
+            columns.erase(columns.begin());
+            values[column] = words[0];
+
+            words.erase(words.begin());
+
+            if (words.empty()) {
+                std::cout << "Chyba v prikaze!" << std::endl;
+                return;
+            }
+        }
+
+        // Odstanenie posledneho slova alebo zatvorky
+        words.erase(words.begin());
+
+        if (!columns.empty()) {
+            std::cout << "Chyba v prikaze!" << std::endl;
+            return;
+        }
+
+        // TODO: je tu hardcode pouzivatel
+        dbms->insertIntoTable(tableName, values, "admin");
+    }
+
+}
+
 /**
- * Rozdeli prikaz na slova, ktore su oddelene medzerou.
+ * Rozdeli prikaz na slova, ktore su oddelene medzerou ale pri tomto rozdeleni ignoruje medzery v uvodzovkach
  *
  * @param command
  * @param words
  */
 void Interpreter::parseCommand(std::string command, std::vector<std::string> &words) {
-    std::stringstream stream(command);
-    std::string word;
+    bool uvodzovky = false;
 
-    while (std::getline(stream, word, ' '))
-    {
-        if (word.empty()) {
+    int indexKoncaPoslednehoSlova = 0;
+
+    for (int i = 0; i < command.length(); i++) {
+        auto aktualnyZnak = command[i];
+
+        if (aktualnyZnak == '"' && !uvodzovky) {
+            uvodzovky = true;
+            auto slovo = command.substr(indexKoncaPoslednehoSlova, i - indexKoncaPoslednehoSlova);
+            if (!slovo.empty()) {
+                words.push_back(slovo);
+            }
+            indexKoncaPoslednehoSlova = i + 1;
             continue;
         }
 
-        words.push_back(word);
+        if (aktualnyZnak == ' ' && !uvodzovky) {
+            auto slovo = command.substr(indexKoncaPoslednehoSlova, i - indexKoncaPoslednehoSlova);
+            if (!slovo.empty()) {
+                words.push_back(slovo);
+            }
+            indexKoncaPoslednehoSlova = i + 1;
+        }
+
+        if (aktualnyZnak == '"') {
+            uvodzovky = false;
+
+            auto slovo = command.substr(indexKoncaPoslednehoSlova, i - indexKoncaPoslednehoSlova);
+            words.push_back(slovo);
+            indexKoncaPoslednehoSlova = i + 1;
+        }
+    }
+
+    // pridaj posledne slovo
+    auto slovo = command.substr(indexKoncaPoslednehoSlova, command.length() - indexKoncaPoslednehoSlova);
+    if (!slovo.empty()) {
+        words.push_back(slovo);
     }
 }
+
+
+
+
 
 
 

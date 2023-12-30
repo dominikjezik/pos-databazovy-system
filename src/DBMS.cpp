@@ -180,7 +180,7 @@ bool DBMS::createTable(TableScheme* tableScheme) {
 void DBMS::dropTable(std::string tableName, std::string username) {
     // Kontrola ci tabulka existuje v zozname tabuliek
     if (!this->tableExists(tableName)) {
-        throw std::invalid_argument("Tabulka neexistuje!");
+        throw std::invalid_argument("Tabulka " + tableName +" neexistuje!");
     }
 
     // Ziskanie schemy tabulky
@@ -285,7 +285,7 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
         }
 
         if (!columnExists) {
-            throw std::invalid_argument("Stlpec " + keyValue.first + " neexistuje!");
+            throw std::invalid_argument("Stlpec \"" + keyValue.first + "\" neexistuje!");
         }
     }
 
@@ -300,6 +300,12 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
             throw std::invalid_argument(row.getName() + " nie je nullable!");
         }
 
+        // Ak nebol zadany stlpec, pridaj do riadku prazdny retazec
+        if (value == newRecord.end()) {
+            csvRow += ";";
+            continue;
+        }
+
         csvRow += value->second + ";";
     }
 
@@ -311,7 +317,7 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
 
     for (auto row : tableData) {
         if (row[primaryKeyIndex] == primaryKeyValue) {
-            throw std::invalid_argument("Zaznam s primarnym klucom " + primaryKeyValue + " uz existuje!");
+            throw std::invalid_argument("Zaznam s primarnym klucom \"" + primaryKeyValue + "\" uz existuje!");
         }
     }
 
@@ -360,72 +366,10 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
     auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
 
     // Prefiltrovanie zaznamov podla podmienok
-    for (auto condition : conditions) {
-        // Kontrola ci stlpec z podmienky existuje
-        bool columnExists = false;
-        int columnIndex = 0;
-
-        for (int i = 0; i < tableScheme->getRows().size(); i++) {
-            auto row = tableScheme->getRows()[i];
-
-            if (row.getName() == condition.getColumn()) {
-                columnExists = true;
-                columnIndex = i;
-                break;
-            }
-        }
-
-        if (!columnExists) {
-            throw std::invalid_argument("Stlpec " + condition.getColumn() + " neexistuje!");
-        }
-
-        // Filtracia zaznamov
-        for (int i = 0; i < rows.size(); i++) {
-            auto row = rows[i];
-
-            switch (condition.getOperation()) {
-                case equal:
-                    if (row[columnIndex] != condition.getValue()) {
-                        rows.erase(rows.begin() + i);
-                        i--;
-                    }
-                    break;
-                case not_equal:
-                    if (row[columnIndex] == condition.getValue()) {
-                        rows.erase(rows.begin() + i);
-                        i--;
-                    }
-                    break;
-                case greater_than:
-                    if (row[columnIndex] <= condition.getValue()) {
-                        rows.erase(rows.begin() + i);
-                        i--;
-                    }
-                    break;
-                case less_than:
-                    if (row[columnIndex] >= condition.getValue()) {
-                        rows.erase(rows.begin() + i);
-                        i--;
-                    }
-                    break;
-                case greater_than_or_equal:
-                    if (row[columnIndex] < condition.getValue()) {
-                        rows.erase(rows.begin() + i);
-                        i--;
-                    }
-                    break;
-                case less_than_or_equal:
-                    if (row[columnIndex] > condition.getValue()) {
-                        rows.erase(rows.begin() + i);
-                        i--;
-                    }
-                    break;
-            }
-        }
-    }
-
+    this->filterRows(rows, tableScheme, conditions);
 
     // Zoradenie zaznamov
+    // TODO: brat do uvahy datove typy
     if (!orderColumn.empty()) {
         // Kontrola ci stlpec z podmienky existuje
         bool columnExists = false;
@@ -484,10 +428,14 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
             header.push_back(row.getName());
         }
     } else {
-
-        // TODO: Zoradenie stlpcov podla poradia v columns
-        for (const auto& column : columns) {
-            header.push_back(column);
+        // Zoradenie stlpcov headerov podla poradia v table scheme
+        for (auto row : tableScheme->getRows()) {
+            for (auto column : columns){
+                if (row.getName() == column) {
+                    header.push_back(row.getName());
+                    break;
+                }
+            }
         }
     }
 
@@ -530,7 +478,12 @@ bool DBMS::dataTypeCheck(std::string value, RowDataType type) {
     switch (type) {
         case type_int:
             try {
-                std::stoi(value);
+                auto converted = std::stoi(value);
+
+                // Kontrola ci je to naozaj int a nie double s odrezanou desatinou ciarkou
+                if (std::to_string(converted) != value) {
+                    throw std::invalid_argument("Zadany datovy typ nie je int!");
+                }
             } catch (std::invalid_argument& e) {
                 throw std::invalid_argument("Zadany datovy typ nie je int!");
             }
@@ -556,6 +509,193 @@ bool DBMS::dataTypeCheck(std::string value, RowDataType type) {
     }
 
     return true;
+}
+
+
+/**
+ * Metoda na filtrovanie zaznamov podla podmienok.
+ *
+ * @param rows
+ * @param tableScheme
+ * @param conditions
+ */
+void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *tableScheme, std::vector<Condition> conditions) {
+    // Cez cyklus prejdeme vsetky zadane podmienky
+    for (auto condition : conditions) {
+        // Kontrola ci stlpec z podmienky existuje
+        bool columnExists = false;
+        int columnIndex = 0;
+
+        for (int i = 0; i < tableScheme->getRows().size(); i++) {
+            auto row = tableScheme->getRows()[i];
+
+            if (row.getName() == condition.getColumn()) {
+                columnExists = true;
+                columnIndex = i;
+                break;
+            }
+        }
+
+        if (!columnExists) {
+            throw std::invalid_argument("Stlpec " + condition.getColumn() + " neexistuje!");
+        }
+
+
+        if (tableScheme->getRows()[columnIndex].getDataType() == type_int) {
+            // Pretypovana hodnota s ktorou budeme zaznamy porovnavat
+            int conditionValue;
+
+            // Informacia ci budeme porovnavat s NULL hodnotou
+            bool compareNull = false;
+
+            try {
+                // Ak je nullable a hodnota v podmienke je NULL
+                if (condition.getValue().size() == 0) {
+                    compareNull = true;
+                } else {
+                    conditionValue = std::stoi(condition.getValue());
+                }
+            } catch (std::invalid_argument& e) {
+                throw std::invalid_argument("Hodnota zadaná v podmienke nie je typu int!");
+            }
+
+            // Filtracia zaznamov
+            for (int i = 0; i < rows.size(); i++) {
+                auto row = rows[i];
+                bool isOk;
+
+                // Ak porovnavame s NULL hodnotou
+                if (compareNull) {
+                    isOk = Condition::compareNull(row[columnIndex], "", condition.getOperation());
+
+                    // Ak porovnavame s hodnotou
+                } else {
+                    try {
+                        auto rowValue = std::stoi(row[columnIndex]);
+                        isOk = Condition::compareInt(rowValue, conditionValue, condition.getOperation());
+                    } catch (std::invalid_argument& e) {
+                        isOk = false;
+                    }
+                }
+
+                if (!isOk) {
+                    rows.erase(rows.begin() + i);
+                    i--;
+                }
+            }
+        } else if (tableScheme->getRows()[columnIndex].getDataType() == type_double) {
+            // Pretypovana hodnota s ktorou budeme zaznamy porovnavat
+            double conditionValue;
+
+            // Informacia ci budeme porovnavat s NULL hodnotou
+            bool compareNull = false;
+
+            try {
+                // Ak je nullable a hodnota v podmienke je NULL
+                if (condition.getValue().size() == 0) {
+                    compareNull = true;
+                } else {
+                    conditionValue = std::stod(condition.getValue());
+                }
+            } catch (std::invalid_argument& e) {
+                throw std::invalid_argument("Hodnota zadaná v podmienke nie je typu double!");
+            }
+
+            // Filtracia zaznamov
+            for (int i = 0; i < rows.size(); i++) {
+                auto row = rows[i];
+                bool isOk;
+
+                // Ak porovnavame s NULL hodnotou
+                if (compareNull) {
+                    isOk = Condition::compareNull(row[columnIndex], "", condition.getOperation());
+
+                    // Ak porovnavame s hodnotou
+                } else {
+                    try {
+                        auto rowValue = std::stod(row[columnIndex]);
+                        isOk = Condition::compareDouble(rowValue, conditionValue, condition.getOperation());
+                    } catch (std::invalid_argument& e) {
+                        isOk = false;
+                    }
+                }
+
+                if (!isOk) {
+                    rows.erase(rows.begin() + i);
+                    i--;
+                }
+            }
+        } else if (tableScheme->getRows()[columnIndex].getDataType() == type_string) {
+            // Filtracia zaznamov
+            for (int i = 0; i < rows.size(); i++) {
+                auto row = rows[i];
+
+                auto isOk = Condition::compareString(row[columnIndex], condition.getValue(), condition.getOperation());
+
+                if (!isOk) {
+                    rows.erase(rows.begin() + i);
+                    i--;
+                }
+            }
+        } else if (tableScheme->getRows()[columnIndex].getDataType() == type_date) {
+            // Filtracia zaznamov
+            for (int i = 0; i < rows.size(); i++) {
+                auto row = rows[i];
+
+                auto isOk = Condition::compareDate(row[columnIndex], condition.getValue(), condition.getOperation());
+
+                if (!isOk) {
+                    rows.erase(rows.begin() + i);
+                    i--;
+                }
+            }
+        } else if (tableScheme->getRows()[columnIndex].getDataType() == type_boolean) {
+            // Pretypovana hodnota s ktorou budeme zaznamy porovnavat
+            bool conditionValue;
+
+            // Informacia ci budeme porovnavat s NULL hodnotou
+            bool compareNull = false;
+
+
+            // Ak je nullable a hodnota v podmienke je NULL
+            if (condition.getValue().size() == 0) {
+                compareNull = true;
+            } else if (condition.getValue() == "true") {
+                conditionValue = true;
+            } else if (condition.getValue() == "false") {
+                conditionValue = false;
+            } else {
+                throw std::invalid_argument("Hodnota zadaná v podmienke nie je typu bool!");
+            }
+
+            // Filtracia zaznamov
+            for (int i = 0; i < rows.size(); i++) {
+                auto row = rows[i];
+                bool isOk;
+
+                // Ak porovnavame s NULL hodnotou
+                if (compareNull) {
+                    isOk = Condition::compareNull(row[columnIndex], "", condition.getOperation());
+
+                    // Ak porovnavame s hodnotou
+                } else {
+                    if (row[columnIndex] == "true" || row[columnIndex] == "false") {
+                        auto rowValue = row[columnIndex] == "true";
+                        isOk = Condition::compareBoolean(rowValue, conditionValue, condition.getOperation());
+                    } else {
+                        isOk = false;
+                    }
+                }
+
+                if (!isOk) {
+                    rows.erase(rows.begin() + i);
+                    i--;
+                }
+            }
+        }
+    }
+
+
 }
 
 
