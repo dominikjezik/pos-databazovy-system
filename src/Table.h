@@ -109,6 +109,16 @@ public:
         return this->primaryKey;
     }
 
+    size_t getPrimaryKeyIndex() {
+        for (size_t i = 0; i < this->rows.size(); i++) {
+            if (this->rows[i].getName() == this->primaryKey) {
+                return i;
+            }
+        }
+
+        throw std::invalid_argument("Stlpec s nazvom \"" + this->primaryKey + "\" neexistuje! (hladanie primarneho kluca)");
+    }
+
     std::vector<TableRowScheme> getRows() {
         return this->rows;
     }
@@ -144,6 +154,24 @@ public:
     Condition(std::string column, std::string value, ConditionOperation operation): column(column), value(value), operation(operation) {
     }
 
+    static ConditionOperation getOperation(std::string operation) {
+        if (operation == "=") {
+            return equal;
+        } else if (operation == "!=") {
+            return not_equal;
+        } else if (operation == ">") {
+            return greater_than;
+        } else if (operation == "<") {
+            return less_than;
+        } else if (operation == ">=") {
+            return greater_than_or_equal;
+        } else if (operation == "<=") {
+            return less_than_or_equal;
+        } else {
+            throw std::invalid_argument("Neznamy operator " + operation + "!");
+        }
+    }
+
     std::string getColumn() {
         return this->column;
     }
@@ -170,6 +198,8 @@ public:
                 return a >= b;
             case less_than_or_equal:
                 return a <= b;
+            default:
+                throw std::invalid_argument("Neznamy operator!");
         }
     }
 
@@ -179,10 +209,7 @@ public:
                 return a == b;
             case not_equal:
                 return a != b;
-            case greater_than:
-            case less_than:
-            case greater_than_or_equal:
-            case less_than_or_equal:
+            default:
                 throw std::invalid_argument("Nullable je mozne porovnat iba cez operaciu \"=\" alebo \"!=\"!");
         }
     }
@@ -201,6 +228,8 @@ public:
                 return a >= b;
             case less_than_or_equal:
                 return a <= b;
+            default:
+                throw std::invalid_argument("Neznamy operator!");
         }
     }
 
@@ -210,10 +239,7 @@ public:
                 return a == b;
             case not_equal:
                 return a != b;
-            case greater_than:
-            case less_than:
-            case greater_than_or_equal:
-            case less_than_or_equal:
+            default:
                 throw std::invalid_argument("Hodnota typu string moze byt porovnana iba cez operaciu \"=\" alebo \"!=\"!");
         }
     }
@@ -224,10 +250,7 @@ public:
                 return a == b;
             case not_equal:
                 return a != b;
-            case greater_than:
-            case less_than:
-            case greater_than_or_equal:
-            case less_than_or_equal:
+            default:
                 throw std::invalid_argument("Hodnota typu date moze byt porovnana iba cez operaciu \"=\" alebo \"!=\"!");
         }
     }
@@ -238,10 +261,7 @@ public:
                 return a == b;
             case not_equal:
                 return a != b;
-            case greater_than:
-            case less_than:
-            case greater_than_or_equal:
-            case less_than_or_equal:
+            default:
                 throw std::invalid_argument("Hodnota typu boolean moze byt porovnana iba cez operaciu \"=\" alebo \"!=\"!");
         }
     }

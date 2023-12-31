@@ -156,7 +156,6 @@ void DBMS::createTable(TableScheme& tableScheme) {
         throw std::invalid_argument("Zadany primarny kluc nepatri pod ziadny stlpec!");
     }
 
-
     // Vytvor subory pre tabulku
     this->fileManager->createTable(tableScheme);
 
@@ -199,6 +198,9 @@ void DBMS::dropTable(std::string tableName, std::string username) {
             break;
         }
     }
+
+    // Dealokovanie tableScheme
+    delete tableScheme;
 }
 
 
@@ -236,126 +238,6 @@ std::vector<std::string> DBMS::getTablesListCreatedByUser(const std::string& use
 
     return tableNames;
 }
-
-
-/**
- * Metoda na vlozenie zaznamu do tabulky.
- *
- * Skontroluje ci tabulka existuje, ci uzivatel ma opravnenie vkladat do tabulky,
- * ci sa vkladaju iba stlpce ktore existuju a kontroluje datove typy.
- *
- * @param tableName
- * @param newRecord
- * @param currentUser
- */
-void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::string> newRecord, std::string currentUser) {
-    // Kontrola ci tabulka existuje v zozname tabuliek
-    if (!this->tableExists(tableName)) {
-        throw std::invalid_argument("Tabulka neexistuje!");
-    }
-
-    // Ziskanie schemy tabulky
-    auto tableScheme = this->fileManager->loadTableScheme(tableName);
-
-    // TODO: Kontrola ci uzivatel ma opravnenie vkladat do tabulky
-
-    // Ulozenie hodnoty primarneho kluca
-    std::string primaryKeyValue;
-    size_t primaryKeyIndex = 0;
-
-    // Kontrola ci sa vkladaju iba stlpce ktore existuju a kontrola datovych typov
-    for (const auto& keyValue : newRecord) {
-        bool columnExists = false;
-
-        for (size_t i = 0; i < tableScheme->getRows().size(); i++) {
-            auto row = tableScheme->getRows()[i];
-
-            if (row.getName() == keyValue.first) {
-                columnExists = true;
-
-                this->dataTypeCheck(keyValue.second, row.getDataType(), row.isNullable());
-
-                if (row.getName() == tableScheme->getPrimaryKey()) {
-                    primaryKeyValue = keyValue.second;
-                    primaryKeyIndex = i;
-                }
-            }
-        }
-
-        if (!columnExists) {
-            throw std::invalid_argument("Stlpec \"" + keyValue.first + "\" neexistuje!");
-        }
-    }
-
-    // Vytvorenie csv riadku
-    std::string csvRow;
-
-    // Kontrola ci sa vkladaju vsetky povinne stlpce a vytvorenie csv riadku
-    for (auto row : tableScheme->getRows()) {
-        auto value = newRecord.find(row.getName());
-
-        if (!row.isNullable() && value == newRecord.end()) {
-            throw std::invalid_argument(row.getName() + " nie je nullable!");
-        }
-
-        // Ak nebol zadany stlpec, pridaj do riadku prazdny retazec
-        if (value == newRecord.end()) {
-            csvRow += ";";
-            continue;
-        }
-
-        csvRow += value->second + ";";
-    }
-
-    // Odstranenie poslednej bodkociarky
-    csvRow.pop_back();
-
-    // Kontrola unikatnosti primarneho kluca
-    auto tableData = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
-
-    for (auto row : tableData) {
-        if (row[primaryKeyIndex] == primaryKeyValue) {
-            throw std::invalid_argument("Zaznam s primarnym klucom \"" + primaryKeyValue + "\" uz existuje!");
-        }
-    }
-
-    // Zapis riadku do suboru
-    this->fileManager->insertIntoTable(tableName, csvRow);
-}
-
-
-/**
- * Metoda na vymazanie zaznamov z tabulky. (DELETE FROM)
- *
- * @param tableName
- * @param conditions
- * @param currentUser
- * @return
- */
-size_t DBMS::deleteFromTable(std::string tableName, std::vector<Condition> conditions, std::string currentUser) {
-    // Kontrola ci tabulka existuje v zozname tabuliek
-    if (!this->tableExists(tableName)) {
-        throw std::invalid_argument("Tabulka neexistuje!");
-    }
-
-    // TODO: Kontrola opravnenia
-
-    // Ziskanie schemy tabulky
-    auto tableScheme = this->fileManager->loadTableScheme(tableName);
-
-    // Ziskanie dat tabulky
-    auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
-
-    // Prefiltrovanie zaznamov podla podmienok
-    std::vector<std::vector<std::string>> filteredOutRows;
-    this->filterOutRows(rows, filteredOutRows, tableScheme, conditions);
-
-    // Vymazanie odfiltrovanych zaznamov zo suboru
-    this->fileManager->saveTableData(tableName, filteredOutRows);
-
-    return rows.size();
-}
-
 
 
 /**
@@ -401,39 +283,10 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
     this->filterRows(rows, tableScheme, conditions);
 
     // Zoradenie zaznamov
-    // TODO: brat do uvahy datove typy
-    if (!orderColumn.empty()) {
-        // Kontrola ci stlpec z podmienky existuje
-        bool columnExists = false;
-        int columnIndex = 0;
-
-        for (int i = 0; i < tableScheme->getRows().size(); i++) {
-            auto row = tableScheme->getRows()[i];
-
-            if (row.getName() == orderColumn) {
-                columnExists = true;
-                columnIndex = i;
-                break;
-            }
-        }
-
-        if (!columnExists) {
-            throw std::invalid_argument("Stlpec " + orderColumn + " neexistuje!");
-        }
-
-        // Zoradenie zaznamov
-        std::sort(rows.begin(), rows.end(), [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
-            if (ascending) {
-                return a[columnIndex] < b[columnIndex];
-            } else {
-                return a[columnIndex] > b[columnIndex];
-            }
-        });
-    }
+    this->orderRows(rows, tableScheme, orderColumn, ascending);
 
     // Odstranenie nepotrebnych stlpcov
-    if (columns.size() != 0) {
-
+    if (!columns.empty()) {
         std::vector<int> columnsToRemove;
 
         for (int i = 0; i < tableScheme->getRows().size(); i++) {
@@ -450,7 +303,6 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
             }
         }
     }
-
 
     // Pridanie hlavicky tabulky
     std::vector<std::string> header;
@@ -473,13 +325,197 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
 
     rows.insert(rows.begin(), header);
 
+    // Dealokovanie tableScheme
+    delete tableScheme;
+
     return rows;
+}
+
+
+/**
+ * Metoda na vlozenie zaznamu do tabulky.
+ *
+ * Skontroluje ci tabulka existuje, ci uzivatel ma opravnenie vkladat do tabulky,
+ * ci sa vkladaju iba stlpce ktore existuju a kontroluje datove typy.
+ *
+ * @param tableName
+ * @param newRecord
+ * @param currentUser
+ */
+void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::string> newRecord, std::string currentUser) {
+    // Kontrola ci tabulka existuje v zozname tabuliek
+    if (!this->tableExists(tableName)) {
+        throw std::invalid_argument("Tabulka neexistuje!");
+    }
+
+    // Ziskanie schemy tabulky
+    auto tableScheme = this->fileManager->loadTableScheme(tableName);
+
+    // TODO: Kontrola opravnenia
+
+    // Kontrola ci sa vkladaju iba stlpce ktore existuju a kontrola datovych typov
+    this->validateExistingColumnsAndTypes(newRecord, tableScheme);
+
+    // Vytvorenie csv riadku
+    std::string csvRow;
+
+    // Kontrola ci sa vkladaju vsetky povinne stlpce a vytvorenie csv riadku
+    for (auto row : tableScheme->getRows()) {
+        auto value = newRecord.find(row.getName());
+
+        if (!row.isNullable() && value == newRecord.end()) {
+            throw std::invalid_argument(row.getName() + " nie je nullable!");
+        }
+
+        // Ak nebol zadany stlpec, pridaj do riadku prazdny retazec
+        if (value == newRecord.end()) {
+            csvRow += ";";
+            continue;
+        }
+
+        csvRow += value->second + ";";
+    }
+
+    // Odstranenie poslednej bodkociarky
+    csvRow.pop_back();
+
+    // Kontrola unikatnosti primarneho kluca
+    auto tableData = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+
+    for (auto& row : tableData) {
+        if (row[tableScheme->getPrimaryKeyIndex()] == newRecord[tableScheme->getPrimaryKey()]) {
+            throw std::invalid_argument("Zaznam s primarnym klucom \"" + newRecord[tableScheme->getPrimaryKey()] + "\" uz existuje!");
+        }
+    }
+
+    // Zapis riadku do suboru
+    this->fileManager->insertIntoTable(tableName, csvRow);
+
+    // Dealokovanie tableScheme
+    delete tableScheme;
+}
+
+
+/**
+ * Metoda na aktualizaciu zaznamov v tabulke. (UPDATE)
+ *
+ * @param tableName
+ * @param newValues
+ * @param conditions
+ * @param currentUser
+ * @return
+ */
+size_t DBMS::updateTable(std::string tableName, std::map<std::string, std::string> newValues, std::vector<Condition> conditions, std::string currentUser) {
+    // Kontrola ci tabulka existuje v zozname tabuliek
+    if (!this->tableExists(tableName)) {
+        throw std::invalid_argument("Tabulka neexistuje!");
+    }
+
+    // TODO: Kontrola opravnenia
+
+    // Ziskanie schemy tabulky
+    auto tableScheme = this->fileManager->loadTableScheme(tableName);
+
+    // Ziskanie dat tabulky
+    auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+
+
+    // Prefiltrovanie zaznamov podla podmienok
+    std::vector<std::vector<std::string>> filteredOutRows;
+    this->filterOutRows(rows, filteredOutRows, tableScheme, conditions);
+
+    // Kontrola ci sa aktualizuju iba stlpce ktore existuju a kontrola datovych typov
+    this->validateExistingColumnsAndTypes(newValues, tableScheme);
+
+    int countOfUpdatedRows = rows.size();
+
+    // Aktualizacia hodnot
+    for (auto& row : rows) {
+        for (auto& newValue : newValues) {
+            for (size_t i = 0; i < tableScheme->getRows().size(); i++) {
+                auto tableRow = tableScheme->getRows()[i];
+
+                if (tableRow.getName() == newValue.first) {
+                    row[i] = newValue.second;
+                    break;
+                }
+            }
+        }
+    }
+
+    // Kontrola unikatnosti primarneho kluca ak bol zmeneny
+    if (newValues.find(tableScheme->getPrimaryKey()) != newValues.end()) {
+        // Ak sa aktualizuje primarny kluc, pocet aktualizovanych zaznamov moze byt maximalne 1
+        if (countOfUpdatedRows > 1) {
+            throw std::invalid_argument("Duplicitne hodnoty v primarnom kluci!");
+        }
+
+        // Ziskanie indexu primarneho kluca
+        size_t primaryKeyIndex = tableScheme->getPrimaryKeyIndex();
+
+        // Kontrola unikatnosti primarneho kluca voci existujucim zaznamom vo filteredOutRows
+        for (auto row : filteredOutRows) {
+            if (row[primaryKeyIndex] == newValues[tableScheme->getPrimaryKey()]) {
+                throw std::invalid_argument("Duplicitne hodnoty v primarnom kluci!");
+            }
+        }
+    }
+
+
+    // Skombinuje odfiltrovane zaznamy s aktualizovanymi zaznamami
+    rows.insert(rows.end(), filteredOutRows.begin(), filteredOutRows.end());
+
+    // Zapisanie aktualizovanych zaznamov do suboru
+    this->fileManager->saveTableData(tableName, rows);
+
+    // Dealokovanie tableScheme
+    delete tableScheme;
+
+    return countOfUpdatedRows;
+}
+
+
+/**
+ * Metoda na vymazanie zaznamov z tabulky. (DELETE FROM)
+ *
+ * @param tableName
+ * @param conditions
+ * @param currentUser
+ * @return
+ */
+size_t DBMS::deleteFromTable(std::string tableName, std::vector<Condition> conditions, std::string currentUser) {
+    // Kontrola ci tabulka existuje v zozname tabuliek
+    if (!this->tableExists(tableName)) {
+        throw std::invalid_argument("Tabulka neexistuje!");
+    }
+
+    // TODO: Kontrola opravnenia
+
+    // Ziskanie schemy tabulky
+    auto tableScheme = this->fileManager->loadTableScheme(tableName);
+
+    // Ziskanie dat tabulky
+    auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+
+    // Prefiltrovanie zaznamov podla podmienok
+    std::vector<std::vector<std::string>> filteredOutRows;
+    this->filterOutRows(rows, filteredOutRows, tableScheme, conditions);
+
+    // Vymazanie odfiltrovanych zaznamov zo suboru
+    this->fileManager->saveTableData(tableName, filteredOutRows);
+
+    // Dealokovanie tableScheme
+    delete tableScheme;
+
+    return rows.size();
 }
 
 
 
 
 
+
+// Metoda iba na debugovanie, bude odstranena
 void DBMS::TEST_printState() {
     // Vypis pouzivatelov
     std::cout << "*** Pouzivatelia ***" << std::endl;
@@ -543,7 +579,61 @@ bool DBMS::dataTypeCheck(std::string value, RowDataType type, bool isNullable) {
             }
             break;
         case type_date:
-            // TODO: Kontrola datumu
+            // YYYY-MM-DD
+
+            if (value.size() != 10) {
+                throw std::invalid_argument("Zadany datovy typ nie je date!");
+            }
+
+            if (value[4] != '-' || value[7] != '-') {
+                throw std::invalid_argument("Zadany datovy typ nie je date!");
+            }
+
+            for (int i = 0; i < value.size(); i++) {
+                if (i == 4 || i == 7) {
+                    continue;
+                }
+
+                if (value[i] < '0' || value[i] > '9') {
+                    throw std::invalid_argument("Zadany datovy typ nie je date!");
+                }
+            }
+
+            // Pretypovanie na int a kontrola ci je to validny datum
+            try {
+                auto year = std::stoi(value.substr(0, 4));
+                auto month = std::stoi(value.substr(5, 2));
+                auto day = std::stoi(value.substr(8, 2));
+
+                if (month < 1 || month > 12) {
+                    throw std::invalid_argument("Zadany datum nie je validny!");
+                }
+
+                if (day < 1 || day > 31) {
+                    throw std::invalid_argument("Zadany datum nie je validny!");
+                }
+
+                if (month == 4 || month == 6 || month == 9 || month == 11) {
+                    if (day > 30) {
+                        throw std::invalid_argument("Zadany datum nie je validny!");
+                    }
+                }
+
+                if (month == 2) {
+                    if (year % 4 == 0) {
+                        if (day > 29) {
+                            throw std::invalid_argument("Zadany datum nie je validny!");
+                        }
+                    } else {
+                        if (day > 28) {
+                            throw std::invalid_argument("Zadany datum nie je validny!");
+                        }
+                    }
+                }
+
+            } catch (std::invalid_argument& e) {
+                throw std::invalid_argument("Zadany datum nie je validny!");
+            }
 
             break;
     }
@@ -755,6 +845,103 @@ void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vecto
                 }
             }
         }
+    }
+}
+
+
+/**
+ * Pomocna metoda na kontrolu ci sa vkladaju iba stlpce ktore existuju a kontrola datovych typov.
+ * Tiez sa pouziva na kontrolu datovych typov pri aktualizacii zaznamov.
+ *
+ * @param record
+ * @param tableScheme
+ */
+void DBMS::validateExistingColumnsAndTypes(std::map<std::string, std::string> &record, TableScheme *tableScheme) {
+    // Kontrola ci sa vkladaju iba stlpce ktore existuju a kontrola datovych typov
+    for (const auto& keyValue : record) {
+        bool columnExists = false;
+
+        for (size_t i = 0; i < tableScheme->getRows().size(); i++) {
+            auto row = tableScheme->getRows()[i];
+
+            if (row.getName() == keyValue.first) {
+                columnExists = true;
+
+                this->dataTypeCheck(keyValue.second, row.getDataType(), row.isNullable());
+            }
+        }
+
+        if (!columnExists) {
+            throw std::invalid_argument("Stlpec \"" + keyValue.first + "\" neexistuje!");
+        }
+    }
+}
+
+
+void DBMS::orderRows(std::vector<std::vector<std::string>> &rows, TableScheme *tableScheme, std::string orderColumn, bool ascending) {
+    if (orderColumn.empty())
+    {
+        return;
+    }
+
+    // Kontrola ci stlpec z podmienky existuje
+    bool columnExists = false;
+    int columnIndex = 0;
+
+    for (int i = 0; i < tableScheme->getRows().size(); i++) {
+        auto row = tableScheme->getRows()[i];
+
+        if (row.getName() == orderColumn) {
+            columnExists = true;
+            columnIndex = i;
+            break;
+        }
+    }
+
+    if (!columnExists) {
+        throw std::invalid_argument("Stlpec " + orderColumn + " neexistuje!");
+    }
+
+    // Zoradenie zaznamov podla cisla
+    if (tableScheme->getRows()[columnIndex].getDataType() == type_int || tableScheme->getRows()[columnIndex].getDataType() == type_double) {
+        // Ak su pripustne aj null hodnoty,
+        if (tableScheme->getRows()[columnIndex].isNullable()) {
+            std::sort(rows.begin(), rows.end(), [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+                if (a[columnIndex].empty()) {
+                    // Zabezpeci ze null hodnoty su "najmensie" v zoradeni
+                    return ascending;
+                }
+
+                if (b[columnIndex].empty()) {
+                    // Zabezpeci ze null hodnoty su "najmensie" v zoradeni
+                    return ascending;
+                }
+
+                if (ascending) {
+                    return std::stod(a[columnIndex]) < std::stod(b[columnIndex]);
+                } else {
+                    return std::stod(a[columnIndex]) > std::stod(b[columnIndex]);
+                }
+            });
+        } else {
+            // Zoradenie zaznamov bez null hodnot
+            std::sort(rows.begin(), rows.end(), [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+                if (ascending) {
+                    return std::stod(a[columnIndex]) < std::stod(b[columnIndex]);
+                } else {
+                    return std::stod(a[columnIndex]) > std::stod(b[columnIndex]);
+                }
+            });
+        }
+    } else {
+        // Zoradenie zaznamov podla retazca
+        std::sort(rows.begin(), rows.end(), [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
+            if (ascending) {
+                return a[columnIndex] < b[columnIndex];
+            } else {
+                return a[columnIndex] > b[columnIndex];
+            }
+        });
     }
 }
 

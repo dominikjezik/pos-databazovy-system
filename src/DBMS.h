@@ -22,6 +22,8 @@ private:
 
     void filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *tableScheme, std::vector<Condition> conditions);
     void filterOutRows(std::vector<std::vector<std::string>>& rows, std::vector<std::vector<std::string>>& filteredOutRows, TableScheme *tableScheme, std::vector<Condition> conditions);
+    void validateExistingColumnsAndTypes(std::map<std::string, std::string>& record, TableScheme *tableScheme);
+    void orderRows(std::vector<std::vector<std::string>>& rows, TableScheme *tableScheme, std::string orderColumn, bool ascending);
 public:
     DBMS();
     ~DBMS();
@@ -44,11 +46,11 @@ public:
     // TODO: void getTablesWithPermissions(std::string username);
 
     // Data management
+    std::vector<std::vector<std::string>> selectFromTable(std::string tableName, std::vector<std::string> columns, std::vector<Condition> conditions, std::string orderColumn, bool ascending, std::string currentUser);
     void insertIntoTable(std::string tableName, std::map<std::string, std::string> newRecord, std::string currentUser);
-    // TODO: Update
+    size_t updateTable(std::string tableName, std::map<std::string, std::string> newValues, std::vector<Condition> conditions, std::string currentUser);
     size_t deleteFromTable(std::string tableName, std::vector<Condition> conditions, std::string currentUser);
 
-    std::vector<std::vector<std::string>> selectFromTable(std::string tableName, std::vector<std::string> columns, std::vector<Condition> conditions, std::string orderColumn, bool ascending, std::string currentUser);
 
     void TEST_printState();
 };
