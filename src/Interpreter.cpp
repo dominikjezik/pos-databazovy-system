@@ -91,6 +91,8 @@ std::string Interpreter::show(std::vector<std::string>& words) {
     } else {
         return errorUnknownCommand();
     }
+
+    return "";
 }
 
 
