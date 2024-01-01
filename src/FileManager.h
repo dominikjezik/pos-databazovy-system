@@ -5,9 +5,11 @@
 #include "Table.h"
 #include "User.h"
 #include "CsvManager.h"
+#include "Permission.h"
 #include <iostream>
 #include <filesystem>
 #include <utility>
+#include <map>
 
 class FileManager {
 private:
@@ -22,7 +24,11 @@ public:
     void saveUser(User *user);
 
     void loadTablesList(std::vector<TableItem*>& table);
-    TableScheme* loadTableScheme(std::string tableName);
+    TableScheme loadTableScheme(std::string tableName);
+
+    void loadPermissions(std::map<std::string, std::map<std::string, std::vector<PermissionType>>>& permissions);
+    void savePermissions(std::map<std::string, std::map<std::string, std::vector<PermissionType>>>& permissions);
+    void addPermission(std::string username, std::string tableName, PermissionType permissionType);
 
     void createTable(TableScheme& tableScheme);
     void dropTable(std::string tableName, std::string owner);

@@ -25,24 +25,52 @@ void FileManager::loadTablesList(std::vector<TableItem*>& tables) {
 }
 
 
-TableScheme *FileManager::loadTableScheme(std::string tableName) {
-    TableScheme* tableScheme = new TableScheme();
-    tableScheme->setName(tableName);
+TableScheme FileManager::loadTableScheme(std::string tableName) {
+    TableScheme tableScheme;
+    tableScheme.setName(tableName);
     bool firstLine = true;
 
     csvManager.loadFile(this->basePath + "/tables/" + tableName + "_scheme.csv", 3, [&](std::string* line) {
         if (firstLine) {
             firstLine = false;
-            tableScheme->setOwner(line[0]);
-            tableScheme->setPrimaryKey(line[1]);
+            tableScheme.setOwner(line[0]);
+            tableScheme.setPrimaryKey(line[1]);
             return;
         }
 
         TableRowScheme row(line[0], (RowDataType) std::stoi(line[1]), std::stoi(line[2]));
-        tableScheme->addRow(row);
+        tableScheme.addRow(row);
     });
 
     return tableScheme;
+}
+
+
+void FileManager::loadPermissions(std::map<std::string, std::map<std::string, std::vector<PermissionType>>>& permissions) {
+    csvManager.loadFile(this->basePath + "/permissions.csv", 3, [&](std::string* line) {
+        auto username = line[0];
+        auto tableName = line[1];
+        auto permissionType = (PermissionType) std::stoi(line[2]);
+
+        permissions[username][tableName].push_back(permissionType);
+    });
+}
+
+void FileManager::savePermissions(std::map<std::string, std::map<std::string, std::vector<PermissionType>>> &permissions) {
+    csvManager.createFile(this->basePath + "/permissions.csv", [&](std::fstream& file){
+        for (auto& [username, tablePermissions] : permissions) {
+            for (auto& [tableName, permissionTypes] : tablePermissions) {
+                for (auto permissionType : permissionTypes) {
+                    file << username << ";" << tableName << ";" << (int)permissionType << std::endl;
+                }
+            }
+        }
+    });
+}
+
+void FileManager::addPermission(std::string username, std::string tableName, PermissionType permissionType) {
+    int permissionTypeInt = (int)permissionType;
+    csvManager.appendToFile(this->basePath + "/permissions.csv", username + ";" + tableName + ";" + std::to_string(permissionTypeInt));
 }
 
 
@@ -77,8 +105,6 @@ void FileManager::dropTable(std::string tableName, std::string owner) {
     if(std::remove((this->basePath + "/tables/" + tableName + "_data.csv").c_str()) != 0) {
         throw std::invalid_argument("Nastala chyba pri vymazavani suboru s datami tabulky!");
     }
-
-    // TODO: odstranit permisie na tabulku
 }
 
 
@@ -114,6 +140,7 @@ void FileManager::createInitialFilesIfNotExists() {
 
     this->createFileIfNotExists(this->basePath + "/users.csv");
     this->createFileIfNotExists(this->basePath + "/tables.csv");
+    this->createFileIfNotExists(this->basePath + "/permissions.csv");
 
     if (!std::filesystem::exists(this->basePath + "/tables")) {
         std::filesystem::create_directory(this->basePath + "/tables");

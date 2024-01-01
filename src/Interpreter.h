@@ -9,14 +9,14 @@ class Interpreter {
 private:
     DBMS* dbms;
     std::string show(std::vector<std::string>& words);
-    std::string create(std::vector<std::string>& words);
+    std::string create(std::vector<std::string>& words, std::string currentUser);
     std::string createUser(std::vector<std::string>& words);
-    std::string createTable(std::vector<std::string>& words);
-    std::string drop(std::vector<std::string>& words);
-    std::string select(std::vector<std::string>& words);
-    std::string insert(std::vector<std::string>& words);
-    std::string update(std::vector<std::string>& words);
-    std::string deleteCommand(std::vector<std::string>& words);
+    std::string createTable(std::vector<std::string>& words, std::string currentUser);
+    std::string drop(std::vector<std::string>& words, std::string currentUser);
+    std::string select(std::vector<std::string>& words, std::string currentUser);
+    std::string insert(std::vector<std::string>& words, std::string currentUser);
+    std::string update(std::vector<std::string>& words, std::string currentUser);
+    std::string deleteCommand(std::vector<std::string>& words, std::string currentUser);
     void parseCommand(std::string command, std::vector<std::string>& words);
     std::string parseWhereConditions(std::vector<std::string>& words, std::vector<Condition>& conditions);
 
@@ -28,7 +28,7 @@ private:
 public:
     Interpreter();
     ~Interpreter();
-    void run(std::string command);
+    void run(std::string command, std::string currentUser);
 };
 
 

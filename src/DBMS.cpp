@@ -12,6 +12,9 @@ DBMS::DBMS() {
 
     // Nacitaj zoznam tabuliek zo suboru
     this->fileManager->loadTablesList(this->tables);
+
+    // Nacitaj zoznam opravneni zo suboru
+    this->fileManager->loadPermissions(this->permissions);
 }
 
 
@@ -116,6 +119,116 @@ bool DBMS::userExists(std::string username) {
 }
 
 
+void DBMS::grantPermission(std::string targetUser, std::string tableName, PermissionType permissionType, std::string currentUser) {
+    // Kontrola ci tabulka existuje v zozname tabuliek a ci je uzivatel vlastnikom tabulky
+    bool tableExists = false;
+
+    for (const auto& table : this->tables) {
+        if (table->getName() == tableName) {
+            tableExists = true;
+            if (table->getOwner() != currentUser) {
+                throw std::invalid_argument("Prava na tabulku moze upravovat iba vlastnik!");
+            }
+        }
+    }
+
+    if (!tableExists) {
+        throw std::invalid_argument("Tabulka neexistuje!");
+    }
+
+    // Kontrola ci uzivatel existuje v zozname pouzivatelov
+    if (!this->userExists(targetUser)) {
+        throw std::invalid_argument("Pouzivatel neexistuje!");
+    }
+
+    // Kontrola ci uzivatel uz nema pridelene opravnenie
+    if (this->permissions.find(targetUser) != this->permissions.end()) {
+        if (this->permissions[targetUser].find(tableName) != this->permissions[targetUser].end()) {
+            bool permissionExists = false;
+
+            for (auto permission : this->permissions[targetUser][tableName]) {
+                if (permission == permissionType) {
+                    permissionExists = true;
+                    break;
+                }
+            }
+
+            if (permissionExists) {
+                throw std::invalid_argument("Pouzivatel uz ma pridelene dane opravnenie!");
+            }
+        }
+    }
+
+    // Pridanie opravnenia
+    this->permissions[targetUser][tableName].push_back(permissionType);
+
+    // Zapis opravnenia do suboru
+    this->fileManager->addPermission(targetUser, tableName, permissionType);
+}
+
+
+void DBMS::revokePermission(std::string targetUser, std::string tableName, PermissionType permissionType, std::string currentUser) {
+    // Kontrola ci tabulka existuje v zozname tabuliek a ci je uzivatel vlastnikom tabulky
+    bool tableExists = false;
+
+    for (const auto& table : this->tables) {
+        if (table->getName() == tableName) {
+            tableExists = true;
+            if (table->getOwner() != currentUser) {
+                throw std::invalid_argument("Prava na tabulku moze upravovat iba vlastnik!");
+            }
+        }
+    }
+
+    if (!tableExists) {
+        throw std::invalid_argument("Tabulka neexistuje!");
+    }
+
+    // Kontrola ci uzivatel existuje v zozname pouzivatelov
+    if (!this->userExists(targetUser)) {
+        throw std::invalid_argument("Pouzivatel neexistuje!");
+    }
+
+    // Kontrola ci uzivatel uz nema pridelene opravnenie
+    if (this->permissions.find(targetUser) != this->permissions.end()) {
+        if (this->permissions[targetUser].find(tableName) != this->permissions[targetUser].end()) {
+            bool permissionExists = false;
+
+            for (auto permission : this->permissions[targetUser][tableName]) {
+                if (permission == permissionType) {
+                    permissionExists = true;
+                    break;
+                }
+            }
+
+            if (!permissionExists) {
+                throw std::invalid_argument("Pouzivatel nema dane opravnenie!");
+            }
+        }
+    }
+
+    // Odobratie opravnenia
+    for (int i = 0; i < this->permissions[targetUser][tableName].size(); i++) {
+        if (this->permissions[targetUser][tableName][i] == permissionType) {
+            this->permissions[targetUser][tableName].erase(this->permissions[targetUser][tableName].begin() + i);
+
+            if (this->permissions[targetUser][tableName].empty()) {
+                this->permissions[targetUser].erase(tableName);
+
+                if (this->permissions[targetUser].empty()) {
+                    this->permissions.erase(targetUser);
+                }
+            }
+
+            break;
+        }
+    }
+
+    // Aktualizacia opravneni v subore
+    this->fileManager->savePermissions(this->permissions);
+}
+
+
 /**
  * Metoda na vytvorenie tabulky.
  *
@@ -174,7 +287,7 @@ void DBMS::createTable(TableScheme& tableScheme) {
  * @param tableName
  * @param username
  */
-void DBMS::dropTable(std::string tableName, std::string username) {
+void DBMS::dropTable(std::string tableName, std::string currentUser) {
     // Kontrola ci tabulka existuje v zozname tabuliek
     if (!this->tableExists(tableName)) {
         throw std::invalid_argument("Tabulka " + tableName +" neexistuje!");
@@ -184,23 +297,44 @@ void DBMS::dropTable(std::string tableName, std::string username) {
     auto tableScheme = this->fileManager->loadTableScheme(tableName);
 
     // Kontrola ci uzivatel je vlastnikom tabulky
-    if (tableScheme->getOwner() != username) {
+    if (tableScheme.getOwner() != currentUser) {
         throw std::invalid_argument("Tabulku moze vymazat iba vlastnik!");
     }
 
     // Vymazanie tabulky zo suboru
-    this->fileManager->dropTable(tableName, tableScheme->getOwner());
+    this->fileManager->dropTable(tableName, tableScheme.getOwner());
 
     // Vymazanie tabulky zo zoznamu tabuliek
     for (int i = 0; i < this->tables.size(); i++) {
         if (this->tables[i]->getName() == tableName) {
+            delete this->tables[i];
             this->tables.erase(this->tables.begin() + i);
             break;
         }
     }
 
-    // Dealokovanie tableScheme
-    delete tableScheme;
+    // Vymazanie opravneni na tabulku
+    std::vector<std::string> usernames;
+
+    for (auto& username : this->permissions) {
+        for (auto& table : username.second) {
+            if (table.first == tableName) {
+                usernames.push_back(username.first);
+                break;
+            }
+        }
+    }
+
+    for (auto& username : usernames) {
+        this->permissions[username].erase(tableName);
+
+        if (this->permissions[username].empty()) {
+            this->permissions.erase(username);
+        }
+    }
+
+    // Aktualizacia suboru s opravneniami
+    this->fileManager->savePermissions(this->permissions);
 }
 
 
@@ -241,6 +375,33 @@ std::vector<std::string> DBMS::getTablesListCreatedByUser(const std::string& use
 
 
 /**
+ *
+ * @param username
+ * @return
+ */
+std::map<std::string, std::string> DBMS::getTablesWithPermissions(std::string username) {
+    std::map<std::string, std::string> tableNamesWithPermissions;
+
+    if (this->permissions.find(username) == this->permissions.end()) {
+        return tableNamesWithPermissions;
+    }
+
+    for (const auto& table : this->permissions[username]) {
+        if (!table.second.empty()) {
+            for (auto permission : table.second) {
+                tableNamesWithPermissions[table.first] += Permission::permissionTypeToString(permission) + ", ";
+            }
+
+            tableNamesWithPermissions[table.first].pop_back();
+            tableNamesWithPermissions[table.first].pop_back();
+        }
+    }
+
+    return tableNamesWithPermissions;
+}
+
+
+/**
  * Metoda na vyber zaznamov z tabulky. (SELECT)
  *
  * @param tableName
@@ -255,7 +416,8 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
         throw std::invalid_argument("Tabulka neexistuje!");
     }
 
-    // TODO: Kontrola opravnenia
+    // Kontrola opravnenia
+    this->authorizeAccess(currentUser, tableName, select_permission);
 
     // Ziskanie schemy tabulky
     auto tableScheme = this->fileManager->loadTableScheme(tableName);
@@ -264,7 +426,7 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
     for (auto column : columns) {
         bool columnExists = false;
 
-        for (auto row : tableScheme->getRows()) {
+        for (auto row : tableScheme.getRows()) {
             if (row.getName() == column) {
                 columnExists = true;
                 break;
@@ -277,7 +439,7 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
     }
 
     // Ziskanie dat tabulky
-    auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+    auto rows = this->fileManager->loadTableData(tableName, tableScheme.getRows().size());
 
     // Prefiltrovanie zaznamov podla podmienok
     this->filterRows(rows, tableScheme, conditions);
@@ -289,8 +451,8 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
     if (!columns.empty()) {
         std::vector<int> columnsToRemove;
 
-        for (int i = 0; i < tableScheme->getRows().size(); i++) {
-            auto row = tableScheme->getRows()[i];
+        for (int i = 0; i < tableScheme.getRows().size(); i++) {
+            auto row = tableScheme.getRows()[i];
 
             if (std::find(columns.begin(), columns.end(), row.getName()) == columns.end()) {
                 columnsToRemove.push_back(i);
@@ -308,12 +470,12 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
     std::vector<std::string> header;
 
     if (columns.empty()) {
-        for (auto row : tableScheme->getRows()) {
+        for (auto row : tableScheme.getRows()) {
             header.push_back(row.getName());
         }
     } else {
         // Zoradenie stlpcov headerov podla poradia v table scheme
-        for (auto row : tableScheme->getRows()) {
+        for (auto row : tableScheme.getRows()) {
             for (auto column : columns){
                 if (row.getName() == column) {
                     header.push_back(row.getName());
@@ -324,9 +486,6 @@ std::vector<std::vector<std::string>> DBMS::selectFromTable(std::string tableNam
     }
 
     rows.insert(rows.begin(), header);
-
-    // Dealokovanie tableScheme
-    delete tableScheme;
 
     return rows;
 }
@@ -351,7 +510,8 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
     // Ziskanie schemy tabulky
     auto tableScheme = this->fileManager->loadTableScheme(tableName);
 
-    // TODO: Kontrola opravnenia
+    // Kontrola opravnenia
+    this->authorizeAccess(currentUser, tableName, insert_permission);
 
     // Kontrola ci sa vkladaju iba stlpce ktore existuju a kontrola datovych typov
     this->validateExistingColumnsAndTypes(newRecord, tableScheme);
@@ -360,7 +520,7 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
     std::string csvRow;
 
     // Kontrola ci sa vkladaju vsetky povinne stlpce a vytvorenie csv riadku
-    for (auto row : tableScheme->getRows()) {
+    for (auto row : tableScheme.getRows()) {
         auto value = newRecord.find(row.getName());
 
         if (!row.isNullable() && value == newRecord.end()) {
@@ -380,19 +540,16 @@ void DBMS::insertIntoTable(std::string tableName, std::map<std::string, std::str
     csvRow.pop_back();
 
     // Kontrola unikatnosti primarneho kluca
-    auto tableData = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+    auto tableData = this->fileManager->loadTableData(tableName, tableScheme.getRows().size());
 
     for (auto& row : tableData) {
-        if (row[tableScheme->getPrimaryKeyIndex()] == newRecord[tableScheme->getPrimaryKey()]) {
-            throw std::invalid_argument("Zaznam s primarnym klucom \"" + newRecord[tableScheme->getPrimaryKey()] + "\" uz existuje!");
+        if (row[tableScheme.getPrimaryKeyIndex()] == newRecord[tableScheme.getPrimaryKey()]) {
+            throw std::invalid_argument("Zaznam s primarnym klucom \"" + newRecord[tableScheme.getPrimaryKey()] + "\" uz existuje!");
         }
     }
 
     // Zapis riadku do suboru
     this->fileManager->insertIntoTable(tableName, csvRow);
-
-    // Dealokovanie tableScheme
-    delete tableScheme;
 }
 
 
@@ -411,13 +568,14 @@ size_t DBMS::updateTable(std::string tableName, std::map<std::string, std::strin
         throw std::invalid_argument("Tabulka neexistuje!");
     }
 
-    // TODO: Kontrola opravnenia
+    // Kontrola opravnenia
+    this->authorizeAccess(currentUser, tableName, update_permission);
 
     // Ziskanie schemy tabulky
     auto tableScheme = this->fileManager->loadTableScheme(tableName);
 
     // Ziskanie dat tabulky
-    auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+    auto rows = this->fileManager->loadTableData(tableName, tableScheme.getRows().size());
 
 
     // Prefiltrovanie zaznamov podla podmienok
@@ -432,8 +590,8 @@ size_t DBMS::updateTable(std::string tableName, std::map<std::string, std::strin
     // Aktualizacia hodnot
     for (auto& row : rows) {
         for (auto& newValue : newValues) {
-            for (size_t i = 0; i < tableScheme->getRows().size(); i++) {
-                auto tableRow = tableScheme->getRows()[i];
+            for (size_t i = 0; i < tableScheme.getRows().size(); i++) {
+                auto tableRow = tableScheme.getRows()[i];
 
                 if (tableRow.getName() == newValue.first) {
                     row[i] = newValue.second;
@@ -444,18 +602,18 @@ size_t DBMS::updateTable(std::string tableName, std::map<std::string, std::strin
     }
 
     // Kontrola unikatnosti primarneho kluca ak bol zmeneny
-    if (newValues.find(tableScheme->getPrimaryKey()) != newValues.end()) {
+    if (newValues.find(tableScheme.getPrimaryKey()) != newValues.end()) {
         // Ak sa aktualizuje primarny kluc, pocet aktualizovanych zaznamov moze byt maximalne 1
         if (countOfUpdatedRows > 1) {
             throw std::invalid_argument("Duplicitne hodnoty v primarnom kluci!");
         }
 
         // Ziskanie indexu primarneho kluca
-        size_t primaryKeyIndex = tableScheme->getPrimaryKeyIndex();
+        size_t primaryKeyIndex = tableScheme.getPrimaryKeyIndex();
 
         // Kontrola unikatnosti primarneho kluca voci existujucim zaznamom vo filteredOutRows
         for (auto row : filteredOutRows) {
-            if (row[primaryKeyIndex] == newValues[tableScheme->getPrimaryKey()]) {
+            if (row[primaryKeyIndex] == newValues[tableScheme.getPrimaryKey()]) {
                 throw std::invalid_argument("Duplicitne hodnoty v primarnom kluci!");
             }
         }
@@ -467,9 +625,6 @@ size_t DBMS::updateTable(std::string tableName, std::map<std::string, std::strin
 
     // Zapisanie aktualizovanych zaznamov do suboru
     this->fileManager->saveTableData(tableName, rows);
-
-    // Dealokovanie tableScheme
-    delete tableScheme;
 
     return countOfUpdatedRows;
 }
@@ -489,13 +644,14 @@ size_t DBMS::deleteFromTable(std::string tableName, std::vector<Condition> condi
         throw std::invalid_argument("Tabulka neexistuje!");
     }
 
-    // TODO: Kontrola opravnenia
+    // Kontrola opravnenia
+    this->authorizeAccess(currentUser, tableName, delete_permission);
 
     // Ziskanie schemy tabulky
     auto tableScheme = this->fileManager->loadTableScheme(tableName);
 
     // Ziskanie dat tabulky
-    auto rows = this->fileManager->loadTableData(tableName, tableScheme->getRows().size());
+    auto rows = this->fileManager->loadTableData(tableName, tableScheme.getRows().size());
 
     // Prefiltrovanie zaznamov podla podmienok
     std::vector<std::vector<std::string>> filteredOutRows;
@@ -503,9 +659,6 @@ size_t DBMS::deleteFromTable(std::string tableName, std::vector<Condition> condi
 
     // Vymazanie odfiltrovanych zaznamov zo suboru
     this->fileManager->saveTableData(tableName, filteredOutRows);
-
-    // Dealokovanie tableScheme
-    delete tableScheme;
 
     return rows.size();
 }
@@ -527,6 +680,20 @@ void DBMS::TEST_printState() {
     std::cout << "*** Tabulky ***" << std::endl;
     for (auto table : this->tables) {
         std::cout << table->getName() << " : " << table->getOwner() << std::endl;
+    }
+
+    // Vypis opravneni
+    std::cout << "*** Opravnenia ***" << std::endl;
+    for (auto permission : this->permissions) {
+        std::cout << permission.first << std::endl;
+
+        for (auto tablePermission : permission.second) {
+            std::cout << "\t" << tablePermission.first << std::endl;
+
+            for (auto permissionType : tablePermission.second) {
+                std::cout << "\t\t" << permissionType << std::endl;
+            }
+        }
     }
 }
 
@@ -650,7 +817,7 @@ bool DBMS::dataTypeCheck(std::string value, RowDataType type, bool isNullable) {
  * @param tableScheme
  * @param conditions
  */
-void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *tableScheme, std::vector<Condition> conditions) {
+void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme& tableScheme, std::vector<Condition> conditions) {
     std::vector<std::vector<std::string>> filteredOutRows;
     this->filterOutRows(rows, filteredOutRows, tableScheme, conditions);
 }
@@ -666,15 +833,15 @@ void DBMS::filterRows(std::vector<std::vector<std::string>>& rows, TableScheme *
  * @param tableScheme
  * @param conditions
  */
-void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vector<std::vector<std::string>>& filteredOutRows, TableScheme *tableScheme, std::vector<Condition> conditions) {
+void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vector<std::vector<std::string>>& filteredOutRows, TableScheme& tableScheme, std::vector<Condition> conditions) {
     // Cez cyklus prejdeme vsetky zadane podmienky
     for (auto condition : conditions) {
         // Kontrola ci stlpec z podmienky existuje
         bool columnExists = false;
         int columnIndex = 0;
 
-        for (int i = 0; i < tableScheme->getRows().size(); i++) {
-            auto row = tableScheme->getRows()[i];
+        for (int i = 0; i < tableScheme.getRows().size(); i++) {
+            auto row = tableScheme.getRows()[i];
 
             if (row.getName() == condition.getColumn()) {
                 columnExists = true;
@@ -688,7 +855,7 @@ void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vecto
         }
 
 
-        if (tableScheme->getRows()[columnIndex].getDataType() == type_int) {
+        if (tableScheme.getRows()[columnIndex].getDataType() == type_int) {
             // Pretypovana hodnota s ktorou budeme zaznamy porovnavat
             int conditionValue;
 
@@ -731,7 +898,7 @@ void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vecto
                     i--;
                 }
             }
-        } else if (tableScheme->getRows()[columnIndex].getDataType() == type_double) {
+        } else if (tableScheme.getRows()[columnIndex].getDataType() == type_double) {
             // Pretypovana hodnota s ktorou budeme zaznamy porovnavat
             double conditionValue;
 
@@ -774,7 +941,7 @@ void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vecto
                     i--;
                 }
             }
-        } else if (tableScheme->getRows()[columnIndex].getDataType() == type_string) {
+        } else if (tableScheme.getRows()[columnIndex].getDataType() == type_string) {
             // Filtracia zaznamov
             for (int i = 0; i < rows.size(); i++) {
                 auto row = rows[i];
@@ -787,7 +954,7 @@ void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vecto
                     i--;
                 }
             }
-        } else if (tableScheme->getRows()[columnIndex].getDataType() == type_date) {
+        } else if (tableScheme.getRows()[columnIndex].getDataType() == type_date) {
             // Filtracia zaznamov
             for (int i = 0; i < rows.size(); i++) {
                 auto row = rows[i];
@@ -800,7 +967,7 @@ void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vecto
                     i--;
                 }
             }
-        } else if (tableScheme->getRows()[columnIndex].getDataType() == type_boolean) {
+        } else if (tableScheme.getRows()[columnIndex].getDataType() == type_boolean) {
             // Pretypovana hodnota s ktorou budeme zaznamy porovnavat
             bool conditionValue;
 
@@ -856,13 +1023,13 @@ void DBMS::filterOutRows(std::vector<std::vector<std::string>>& rows, std::vecto
  * @param record
  * @param tableScheme
  */
-void DBMS::validateExistingColumnsAndTypes(std::map<std::string, std::string> &record, TableScheme *tableScheme) {
+void DBMS::validateExistingColumnsAndTypes(std::map<std::string, std::string> &record, TableScheme& tableScheme) {
     // Kontrola ci sa vkladaju iba stlpce ktore existuju a kontrola datovych typov
     for (const auto& keyValue : record) {
         bool columnExists = false;
 
-        for (size_t i = 0; i < tableScheme->getRows().size(); i++) {
-            auto row = tableScheme->getRows()[i];
+        for (size_t i = 0; i < tableScheme.getRows().size(); i++) {
+            auto row = tableScheme.getRows()[i];
 
             if (row.getName() == keyValue.first) {
                 columnExists = true;
@@ -878,7 +1045,7 @@ void DBMS::validateExistingColumnsAndTypes(std::map<std::string, std::string> &r
 }
 
 
-void DBMS::orderRows(std::vector<std::vector<std::string>> &rows, TableScheme *tableScheme, std::string orderColumn, bool ascending) {
+void DBMS::orderRows(std::vector<std::vector<std::string>> &rows, TableScheme& tableScheme, std::string orderColumn, bool ascending) {
     if (orderColumn.empty())
     {
         return;
@@ -888,8 +1055,8 @@ void DBMS::orderRows(std::vector<std::vector<std::string>> &rows, TableScheme *t
     bool columnExists = false;
     int columnIndex = 0;
 
-    for (int i = 0; i < tableScheme->getRows().size(); i++) {
-        auto row = tableScheme->getRows()[i];
+    for (int i = 0; i < tableScheme.getRows().size(); i++) {
+        auto row = tableScheme.getRows()[i];
 
         if (row.getName() == orderColumn) {
             columnExists = true;
@@ -903,9 +1070,9 @@ void DBMS::orderRows(std::vector<std::vector<std::string>> &rows, TableScheme *t
     }
 
     // Zoradenie zaznamov podla cisla
-    if (tableScheme->getRows()[columnIndex].getDataType() == type_int || tableScheme->getRows()[columnIndex].getDataType() == type_double) {
+    if (tableScheme.getRows()[columnIndex].getDataType() == type_int || tableScheme.getRows()[columnIndex].getDataType() == type_double) {
         // Ak su pripustne aj null hodnoty,
-        if (tableScheme->getRows()[columnIndex].isNullable()) {
+        if (tableScheme.getRows()[columnIndex].isNullable()) {
             std::sort(rows.begin(), rows.end(), [&](const std::vector<std::string>& a, const std::vector<std::string>& b) {
                 if (a[columnIndex].empty()) {
                     // Zabezpeci ze null hodnoty su "najmensie" v zoradeni
@@ -945,3 +1112,30 @@ void DBMS::orderRows(std::vector<std::vector<std::string>> &rows, TableScheme *t
     }
 }
 
+
+void DBMS::authorizeAccess(std::string username, std::string tableName, PermissionType permissionType) {
+    // Najskor kontrola ci je pouzivatel vlastnikom tabulky
+    for (const auto& table : this->tables) {
+        if (table->getName() == tableName) {
+            if (table->getOwner() == username) {
+                return;
+            }
+        }
+    }
+
+    if (this->permissions.find(username) == this->permissions.end()) {
+        throw std::invalid_argument("Nemate opravnenie na vykonanie tejto operacie!");
+    }
+
+    if (this->permissions[username].find(tableName) == this->permissions[username].end()) {
+        throw std::invalid_argument("Nemate opravnenie na vykonanie tejto operacie!");
+    }
+
+    for (auto permission : this->permissions[username][tableName]) {
+        if (permission == permissionType) {
+            return;
+        }
+    }
+
+    throw std::invalid_argument("Nemate opravnenie na vykonanie tejto operacie!");
+}

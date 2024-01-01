@@ -2,6 +2,10 @@
 
 Interpreter::Interpreter() {
     this->dbms = new DBMS();
+
+    // TODO: odstranit
+    //dbms->grantPermission("jezik", "data", select_permission, "admin");
+    //dbms->grantPermission("jezik", "data", delete_permission, "admin");
 }
 
 Interpreter::~Interpreter() {
@@ -9,7 +13,7 @@ Interpreter::~Interpreter() {
 }
 
 
-void Interpreter::run(std::string command) {
+void Interpreter::run(std::string command, std::string currentUser) {
     // TODO: Predpokladam, ze aj run bude vraciat string, ktory sa bude posielat klientovi
 
     // Rozdel prikaz na slova
@@ -31,21 +35,23 @@ void Interpreter::run(std::string command) {
         return;
     }
 
+    // TODO: pridat prikazy grant a revoke
+
     try {
         if (commandName == "show") {
             this->show(words);
         } else if (commandName == "create") {
-            this->create(words);
+            this->create(words, currentUser);
         } else if (commandName == "drop") {
-            this->drop(words);
+            this->drop(words, currentUser);
         } else if (commandName == "select") {
-            this->select(words);
+            this->select(words, currentUser);
         }  else if (commandName == "insert") {
-            this->insert(words);
+            this->insert(words, currentUser);
         } else if (commandName == "update") {
-            this->update(words);
+            this->update(words, currentUser);
         } else if (commandName == "delete") {
-            this->deleteCommand(words);
+            this->deleteCommand(words, currentUser);
         } else {
             // TODO: odstranit priamy vypis na konzolu
             std::cout << "Neznamy prikaz!" << std::endl;
@@ -79,6 +85,17 @@ std::string Interpreter::show(std::vector<std::string>& words) {
                 std::cout << table << std::endl;
             }
 
+            // show tables accessible for
+        } else if (words.size() == 4 && words[1] == "accessible" && words[2] == "for") {
+            if (!this->dbms->userExists(words[3])) {
+                return error("Pouzivatel " + words[3] + " neexistuje!");
+            }
+
+            auto tables = this->dbms->getTablesWithPermissions(words[3]);
+            std::cout << "Tabulky pristupne pouzivatelovi " << words[3] << ":" << std::endl;
+            for (auto table : tables) {
+                std::cout << table.first << " (" << table.second << ")" << std::endl;
+            }
         } else {
             return errorUnknownCommand();
         }
@@ -96,13 +113,13 @@ std::string Interpreter::show(std::vector<std::string>& words) {
 }
 
 
-std::string Interpreter::create(std::vector<std::string>& words) {
+std::string Interpreter::create(std::vector<std::string>& words, std::string currentUser) {
     if (words[0] == "user") {
         words.erase(words.begin());
         return this->createUser(words);
     } else if (words[0] == "table") {
         words.erase(words.begin());
-        return this->createTable(words);
+        return this->createTable(words, currentUser);
     } else {
         return errorUnknownCommand();
     }
@@ -130,7 +147,7 @@ std::string Interpreter::createUser(std::vector<std::string>& words) {
 
 
 // create table NAZOV (stlpec1 typ1, stlpec2 typ2, stlpec3 typ3 not null, stlpec4 typ4, stlpec5 typ5 primary key)
-std::string Interpreter::createTable(std::vector<std::string>& words) {
+std::string Interpreter::createTable(std::vector<std::string>& words, std::string currentUser) {
     if (words.empty()) {
         return error();
     }
@@ -275,8 +292,7 @@ std::string Interpreter::createTable(std::vector<std::string>& words) {
         return error("Tabulka musi mat primarny kluc!");
     }
 
-    // TODO: je tu hardcoded pouzivatel
-    auto tableScheme = TableScheme(tableName, "admin", primaryKeyColumn);
+    auto tableScheme = TableScheme(tableName, currentUser, primaryKeyColumn);
 
     for (auto row : rows) {
         tableScheme.addRow(row);
@@ -288,7 +304,7 @@ std::string Interpreter::createTable(std::vector<std::string>& words) {
 }
 
 
-std::string Interpreter::drop(std::vector<std::string>& words) {
+std::string Interpreter::drop(std::vector<std::string>& words, std::string currentUser) {
     if (words[0] != "table") {
         return errorUnknownCommand();
     }
@@ -306,22 +322,18 @@ std::string Interpreter::drop(std::vector<std::string>& words) {
         return error();
     }
 
-    // TODO: je tu hardcoded pouzivatel
-    dbms->dropTable(tableName, "admin");
+    dbms->dropTable(tableName, currentUser);
 
     return success("Tabulka " + tableName + " bola zmazana!");
 }
 
 
-std::string Interpreter::select(std::vector<std::string>& words) {
+std::string Interpreter::select(std::vector<std::string>& words, std::string currentUser) {
     std::string tableName;
     std::vector<std::string> columns;
     std::vector<Condition> conditions;
     std::string orderColumn;
     bool ascending = true;
-
-    // TODO: je tu hardcoded pouzivatel
-    std::string currentUser = "admin";
 
     // ak nevyberam vsetky stlpce, ale iba konkretne
     if (words[0] != "*") {
@@ -453,7 +465,7 @@ std::string Interpreter::select(std::vector<std::string>& words) {
 
 
 // INSERT INTO table_name (column1 column2 column3 ...) VALUES (value1 value2 value3 ...);
-std::string Interpreter::insert(std::vector<std::string>& words) {
+std::string Interpreter::insert(std::vector<std::string>& words, std::string currentUser) {
     if (words[0] != "into") {
         return errorUnknownCommand();
     }
@@ -562,14 +574,13 @@ std::string Interpreter::insert(std::vector<std::string>& words) {
         return error();
     }
 
-    // TODO: je tu hardcoded pouzivatel
-    dbms->insertIntoTable(tableName, values, "admin");
+    dbms->insertIntoTable(tableName, values, currentUser);
 
     return success("Zaznam bol vlozeny!");
 }
 
 
-std::string Interpreter::update(std::vector<std::string> &words) {
+std::string Interpreter::update(std::vector<std::string> &words, std::string currentUser) {
     std::string tableName = words[0];
     words.erase(words.begin());
 
@@ -628,15 +639,14 @@ std::string Interpreter::update(std::vector<std::string> &words) {
         return error;
     }
 
-    // TODO: je tu hardcoded pouzivatel
-    size_t countOfUpdated = this->dbms->updateTable(tableName, valuesForUpdate, conditions, "admin");
+    size_t countOfUpdated = this->dbms->updateTable(tableName, valuesForUpdate, conditions, currentUser);
 
     return success("Pocet aktualizovanych riadkov: " + std::to_string(countOfUpdated));
 }
 
 
 // DELETE FROM table_name WHERE column_name = value
-std::string Interpreter::deleteCommand(std::vector<std::string>& words) {
+std::string Interpreter::deleteCommand(std::vector<std::string>& words, std::string currentUser) {
     if (words[0] != "from") {
         return errorUnknownCommand();
     }
@@ -659,8 +669,7 @@ std::string Interpreter::deleteCommand(std::vector<std::string>& words) {
         return error;
     }
 
-    // TODO: je tu hardcoded pouzivatel
-    size_t countOfDeleted = this->dbms->deleteFromTable(tableName, conditions, "admin");
+    size_t countOfDeleted = this->dbms->deleteFromTable(tableName, conditions, currentUser);
 
     return success("Pocet zmazanych riadkov: " + std::to_string(countOfDeleted));
 }
