@@ -28,6 +28,20 @@ public:
                 return "";
         }
     }
+
+    static PermissionType stringToPermissionType(std::string permission) {
+        if (permission == "select") {
+            return select_permission;
+        } else if (permission == "insert") {
+            return insert_permission;
+        } else if (permission == "update") {
+            return update_permission;
+        } else if (permission == "delete") {
+            return delete_permission;
+        } else {
+            throw std::invalid_argument("Neznamy typ opravnenia!");
+        }
+    }
 };
 
 #endif //DATABAZOVY_SYSTEM_PERMISSION_H

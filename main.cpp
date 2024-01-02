@@ -2,6 +2,7 @@
 #include <iomanip>
 #include "src/DBMS.h"
 #include "src/Interpreter.h"
+#include "src/Decoder.h"
 
 void vypisLogo();
 void seedUsersTable(Interpreter& interpreter, std::string user);
@@ -19,9 +20,9 @@ int main() {
     std::cout << "username> ";
     std::getline(std::cin, currentUser);
 
-    seedUsersTable(interpreter, currentUser);
-    seedPostsTable(interpreter, currentUser);
-    seedDatatypesTable(interpreter, currentUser);
+    //seedUsersTable(interpreter, currentUser);
+    //seedPostsTable(interpreter, currentUser);
+    //seedDatatypesTable(interpreter, currentUser);
 
     std::string command;
 
@@ -34,7 +35,8 @@ int main() {
             break;
         }
 
-        interpreter.run(command, currentUser);
+        std::string result = interpreter.run(command, currentUser);
+        Decoder::decodeAndPrint(result);
         std::cout << std::endl;
     }
 

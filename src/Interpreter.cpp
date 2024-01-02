@@ -2,10 +2,6 @@
 
 Interpreter::Interpreter() {
     this->dbms = new DBMS();
-
-    // TODO: odstranit
-    //dbms->grantPermission("jezik", "data", select_permission, "admin");
-    //dbms->grantPermission("jezik", "data", delete_permission, "admin");
 }
 
 Interpreter::~Interpreter() {
@@ -13,15 +9,13 @@ Interpreter::~Interpreter() {
 }
 
 
-void Interpreter::run(std::string command, std::string currentUser) {
-    // TODO: Predpokladam, ze aj run bude vraciat string, ktory sa bude posielat klientovi
-
+std::string Interpreter::run(std::string command, std::string currentUser) {
     // Rozdel prikaz na slova
     std::vector<std::string> words;
     this->parseCommand(command, words);
 
     if (words.empty()) {
-        return;
+        return "";
     }
 
     // Identifikuj prikaz
@@ -30,86 +24,92 @@ void Interpreter::run(std::string command, std::string currentUser) {
 
     // Predpokladame ze vsetky prikazy maju aspon dve slova
     if (words.empty()) {
-        // TODO: odstranit priamy vypis na konzolu
-        std::cout << "Neznamy prikaz!" << std::endl;
-        return;
+        return Encoder::errorUnknownCommand();
     }
-
-    // TODO: pridat prikazy grant a revoke
 
     try {
         if (commandName == "show") {
-            this->show(words);
+            return this->show(words);
         } else if (commandName == "create") {
-            this->create(words, currentUser);
+            return this->create(words, currentUser);
         } else if (commandName == "drop") {
-            this->drop(words, currentUser);
+            return this->drop(words, currentUser);
         } else if (commandName == "select") {
-            this->select(words, currentUser);
+            return this->select(words, currentUser);
         }  else if (commandName == "insert") {
-            this->insert(words, currentUser);
+            return this->insert(words, currentUser);
         } else if (commandName == "update") {
-            this->update(words, currentUser);
+            return this->update(words, currentUser);
         } else if (commandName == "delete") {
-            this->deleteCommand(words, currentUser);
-        } else {
-            // TODO: odstranit priamy vypis na konzolu
-            std::cout << "Neznamy prikaz!" << std::endl;
+            return this->deleteCommand(words, currentUser);
+        } else if (commandName == "grant") {
+            return this->grant(words, currentUser);
+        } else if (commandName == "revoke") {
+            return this->revoke(words, currentUser);
         }
-    } catch (std::exception& e) {
-        // TODO: odstranit priamy vypis na konzolu
-        std::cout << "Chyba v prikaze! Detaily: " << e.what() << std::endl;
-    }
 
+        return Encoder::errorUnknownCommand();
+    } catch (std::exception& e) {
+        return Encoder::error(std::string(e.what()));
+    }
 }
 
 
 std::string Interpreter::show(std::vector<std::string>& words) {
-    // TODO: nahradenie priameho vypisu na konzolu vracanim stringu pre klienta
-
     if (words[0] == "tables") {
         if (words.size() == 1) {
             auto tables = this->dbms->getTablesList();
-            std::cout << "Tabulky:" << std::endl;
-            for (auto table : tables) {
-                std::cout << table << std::endl;
-            }
+
+            // Do tabulky vloz na zaciatok hlavicku
+            tables.insert(tables.begin(), std::vector<std::string>{"Tabulka", "Vlastnik" });
+
+            return Encoder::success(tables);
         } else if (words.size() == 3 && words[1] == "from") {
             if (!this->dbms->userExists(words[2])) {
-                return error("Pouzivatel " + words[2] + " neexistuje!");
+                return Encoder::error("Pouzivatel " + words[2] + " neexistuje!");
             }
 
             auto table = this->dbms->getTablesListCreatedByUser(words[2]);
-            std::cout << "Tabulky vytvorene pouzivatelom " << words[2] << ":" << std::endl;
-            for (auto table : table) {
-                std::cout << table << std::endl;
-            }
+
+            // Do tabulky vloz na zaciatok hlavicku
+            table.insert(table.begin(), "Tabulka");
+
+            return Encoder::success("Tabulky vytvorene pouzivatelom " + words[2] + ":", table);
 
             // show tables accessible for
         } else if (words.size() == 4 && words[1] == "accessible" && words[2] == "for") {
             if (!this->dbms->userExists(words[3])) {
-                return error("Pouzivatel " + words[3] + " neexistuje!");
+                return Encoder::error("Pouzivatel " + words[3] + " neexistuje!");
             }
 
             auto tables = this->dbms->getTablesWithPermissions(words[3]);
-            std::cout << "Tabulky pristupne pouzivatelovi " << words[3] << ":" << std::endl;
+
+            auto result = std::vector<std::vector<std::string>>();
+
+            // Do tabulky vloz na zaciatok hlavicku
+            result.push_back(std::vector<std::string>{"Tabulka", "Prava"});
+
             for (auto table : tables) {
-                std::cout << table.first << " (" << table.second << ")" << std::endl;
+                auto row = std::vector<std::string>();
+                row.push_back(table.first);
+                row.push_back(table.second);
+                result.push_back(row);
             }
+
+            return Encoder::success("Tabulky pristupne pouzivatelovi " + words[3] + ":", result);
         } else {
-            return errorUnknownCommand();
+            return Encoder::errorUnknownCommand();
         }
     } else if (words[0] == "users") {
         auto users = this->dbms->getUsersList();
-        std::cout << "Pouzivatelia:" << std::endl;
-        for (auto user : users) {
-            std::cout << user << std::endl;
-        }
-    } else {
-        return errorUnknownCommand();
+
+        // Do tabulky vloz na zaciatok hlavicku
+        users.insert(users.begin(), "Pouzivatel");
+
+        return Encoder::success(users);
     }
 
-    return "";
+    return Encoder::errorUnknownCommand();
 }
 
 
@@ -121,7 +121,7 @@ std::string Interpreter::create(std::vector<std::string>& words, std::string cur
         words.erase(words.begin());
         return this->createTable(words, currentUser);
     } else {
-        return errorUnknownCommand();
+        return Encoder::errorUnknownCommand();
     }
 }
 
@@ -129,27 +129,27 @@ std::string Interpreter::create(std::vector<std::string>& words, std::string cur
 // CREATE USER username IDENTIFIED BY password
 std::string Interpreter::createUser(std::vector<std::string>& words) {
     if (words.size() != 4) {
-        return errorUnknownCommand();
+        return Encoder::errorUnknownCommand();
     }
 
     if (words[1] != "identified" || words[2] != "by") {
-        return error();
+        return Encoder::error();
     }
 
     if (this->dbms->userExists(words[0])) {
-        return error("Pouzivatel " + words[0] + " uz existuje!");
+        return Encoder::error("Pouzivatel " + words[0] + " uz existuje!");
     }
 
     this->dbms->createUser(words[0], words[3]);
 
-    return success("Pouzivatel " + words[0] + " bol vytvoreny!");
+    return Encoder::success("Pouzivatel " + words[0] + " bol vytvoreny!");
 }
 
 
 // create table NAZOV (stlpec1 typ1, stlpec2 typ2, stlpec3 typ3 not null, stlpec4 typ4, stlpec5 typ5 primary key)
 std::string Interpreter::createTable(std::vector<std::string>& words, std::string currentUser) {
     if (words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     // Ziskaj nazov tabulky
@@ -158,7 +158,7 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
 
     // Kontrola ci zacina zatvorkou
     if (words[0].size() == 0 || words[0][0] != '(') {
-        return error();
+        return Encoder::error();
     }
 
     // Odstran zatvorku
@@ -169,7 +169,7 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
     }
 
     if (words[0].size() == 0) {
-        return error();
+        return Encoder::error();
     }
 
     std::vector<TableRowScheme> rows;
@@ -180,12 +180,12 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
 
         // Musia by minimalne dve slova: nazov_stlpca a typ
         if (words.size() < 2) {
-            return error();
+            return Encoder::error();
         }
 
         // Ak prve slovo konci ciarkou tak vyhod chybu
         if (words[0].back() == ',') {
-            return error();
+            return Encoder::error();
         }
 
         std::string columnName = words[0];
@@ -213,7 +213,7 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
 
             // Ak nekonci ciarkou tak musi byt slovo "not" a "null" alebo "primary" a "key" alebo ")"
             if (words[0] != "not" && words[0] != "primary" && words[0] != ")") {
-                return error();
+                return Encoder::error();
             }
 
             if (words[0] == "not") {
@@ -229,7 +229,7 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
                 }
 
                 if (words[0] != "null") {
-                    return error();
+                    return Encoder::error();
                 }
 
                 words.erase(words.begin());
@@ -247,7 +247,7 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
                 }
 
                 if (words[0] != "key") {
-                    return error();
+                    return Encoder::error();
                 }
 
                 words.erase(words.begin());
@@ -269,7 +269,7 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
             if (primaryKeyColumn.empty()) {
                 primaryKeyColumn = columnName;
             } else {
-                return error("Tabulka nemoze mat viac ako jeden primarny kluc!");
+                return Encoder::error("Tabulka nemoze mat viac ako jeden primarny kluc!");
             }
         }
 
@@ -285,11 +285,11 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
 
     // ak este nieco ostalo tak vyhod chybu
     if (!words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     if (primaryKeyColumn.empty()) {
-        return error("Tabulka musi mat primarny kluc!");
+        return Encoder::error("Tabulka musi mat primarny kluc!");
     }
 
     auto tableScheme = TableScheme(tableName, currentUser, primaryKeyColumn);
@@ -300,31 +300,31 @@ std::string Interpreter::createTable(std::vector<std::string>& words, std::strin
 
     this->dbms->createTable(tableScheme);
 
-    return success("Tabulka " + tableName + " bola vytvorena!");
+    return Encoder::success("Tabulka " + tableName + " bola vytvorena!");
 }
 
 
 std::string Interpreter::drop(std::vector<std::string>& words, std::string currentUser) {
     if (words[0] != "table") {
-        return errorUnknownCommand();
+        return Encoder::errorUnknownCommand();
     }
 
     words.erase(words.begin());
 
     if (words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     std::string tableName = words[0];
     words.erase(words.begin());
 
     if (!words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     dbms->dropTable(tableName, currentUser);
 
-    return success("Tabulka " + tableName + " bola zmazana!");
+    return Encoder::success("Tabulka " + tableName + " bola zmazana!");
 }
 
 
@@ -339,7 +339,7 @@ std::string Interpreter::select(std::vector<std::string>& words, std::string cur
     if (words[0] != "*") {
         // ak je prikaz v tvare "select from" tak vyhoď chybu
         if (words[0] == "from") {
-            return error();
+            return Encoder::error();
         }
 
         while (words[0] != "from") {
@@ -352,7 +352,7 @@ std::string Interpreter::select(std::vector<std::string>& words, std::string cur
             words.erase(words.begin());
 
             if (words.empty()) {
-                return error();
+                return Encoder::error();
             }
         }
     } else {
@@ -361,14 +361,14 @@ std::string Interpreter::select(std::vector<std::string>& words, std::string cur
 
     // ak prikaz nepokracuje slovom "from" tak vyhoď chybu
     if (words.empty() || words[0] != "from") {
-        return error();
+        return Encoder::error();
     }
 
     words.erase(words.begin());
 
     // ak za slovom "from" nie je meno tabulky tak vyhoď chybu
     if (words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     tableName = words[0];
@@ -380,7 +380,7 @@ std::string Interpreter::select(std::vector<std::string>& words, std::string cur
 
         // ak za slovom "where" nie je podmienka tak vyhoď chybu
         if (words.empty()) {
-            return error();
+            return Encoder::error();
         }
 
         // Spracuj podmienky, ktoré sú oddelené slovom "and"
@@ -388,7 +388,7 @@ std::string Interpreter::select(std::vector<std::string>& words, std::string cur
 
             // Kontrola ci nasledujuce slova su aspo 3 (stlpec operator hodnota)
             if (words.size() < 3) {
-                return error();
+                return Encoder::error();
             }
 
             std::string column = words[0];
@@ -414,7 +414,7 @@ std::string Interpreter::select(std::vector<std::string>& words, std::string cur
             } else if (words[0] == "order") {
                 break;
             } else {
-                return error();
+                return Encoder::error();
             }
 
         }
@@ -426,14 +426,14 @@ std::string Interpreter::select(std::vector<std::string>& words, std::string cur
 
         // ak za slovom "order" nenasleduje slovo "by" tak vyhoď chybu
         if (words.empty() || words[0] != "by") {
-            return error();
+            return Encoder::error();
         }
 
         words.erase(words.begin());
 
         // ak za slovom "by" nie je stlpec tak vyhoď chybu
         if (words.empty()) {
-            return error();
+            return Encoder::error();
         }
 
         orderColumn = words[0];
@@ -447,33 +447,33 @@ std::string Interpreter::select(std::vector<std::string>& words, std::string cur
                 words.erase(words.begin());
                 ascending = false;
             } else {
-                return error();
+                return Encoder::error();
             }
         }
     }
 
     // ak sa tu este nachadzaju nejake slova tak vyhoď chybu
     if (!words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     // ziskaj vysledky
     auto result = this->dbms->selectFromTable(tableName, columns, conditions, orderColumn, ascending, currentUser);
 
-    return success(result);
+    return Encoder::success(result);
 }
 
 
-// INSERT INTO table_name (column1 column2 column3 ...) VALUES (value1 value2 value3 ...);
+// insert into table_name (column1 column2 column3 ...) values (value1 value2 value3 ...)
 std::string Interpreter::insert(std::vector<std::string>& words, std::string currentUser) {
     if (words[0] != "into") {
-        return errorUnknownCommand();
+        return Encoder::errorUnknownCommand();
     }
 
     words.erase(words.begin());
 
     if (words.size() < 4) {
-        return error();
+        return Encoder::error();
     }
 
     std::string tableName = words[0];
@@ -481,7 +481,7 @@ std::string Interpreter::insert(std::vector<std::string>& words, std::string cur
 
     // Kontrola ci zacina zatvorkou
     if (words[0].size() == 0 || words[0][0] != '(') {
-        return error();
+        return Encoder::error();
     }
 
     // Odstran zatvorku
@@ -492,7 +492,7 @@ std::string Interpreter::insert(std::vector<std::string>& words, std::string cur
     }
 
     if (words[0].size() == 0) {
-        return error();
+        return Encoder::error();
     }
 
     std::vector<std::string> columns;
@@ -510,7 +510,7 @@ std::string Interpreter::insert(std::vector<std::string>& words, std::string cur
         words.erase(words.begin());
 
         if (words.empty()) {
-            return error();
+            return Encoder::error();
         }
     }
 
@@ -518,7 +518,7 @@ std::string Interpreter::insert(std::vector<std::string>& words, std::string cur
     words.erase(words.begin());
 
     if (words[0] != "values") {
-        return error();
+        return Encoder::error();
     }
 
     // Odstranenie slova values
@@ -526,7 +526,7 @@ std::string Interpreter::insert(std::vector<std::string>& words, std::string cur
 
     // Kontrola ci zacina zatvorkou
     if (words[0].size() == 0 || words[0][0] != '(') {
-        return error();
+        return Encoder::error();
     }
 
     // Odstran zatvorku
@@ -542,7 +542,7 @@ std::string Interpreter::insert(std::vector<std::string>& words, std::string cur
     while (words[0] != ")") {
         // Ak je viac hodnot ako stlpcov tak vyhod chybu
         if (columns.empty()) {
-            return error();
+            return Encoder::error();
         }
 
         // Ak slovo konci zatvorkou tak ju odstran
@@ -563,7 +563,7 @@ std::string Interpreter::insert(std::vector<std::string>& words, std::string cur
         words.erase(words.begin());
 
         if (words.empty()) {
-            return error();
+            return Encoder::error();
         }
     }
 
@@ -571,12 +571,12 @@ std::string Interpreter::insert(std::vector<std::string>& words, std::string cur
     words.erase(words.begin());
 
     if (!columns.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     dbms->insertIntoTable(tableName, values, currentUser);
 
-    return success("Zaznam bol vlozeny!");
+    return Encoder::success("Zaznam bol vlozeny!");
 }
 
 
@@ -585,13 +585,13 @@ std::string Interpreter::update(std::vector<std::string> &words, std::string cur
     words.erase(words.begin());
 
     if (words.empty() || words[0] != "set") {
-        return error();
+        return Encoder::error();
     }
 
     words.erase(words.begin());
 
     if (words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     std::map<std::string, std::string> valuesForUpdate;
@@ -599,7 +599,7 @@ std::string Interpreter::update(std::vector<std::string> &words, std::string cur
     while (!words.empty() && words[0] != "where") {
         // Kontrola ci nasledujuce slova su aspon 3 (stlpec = hodnota)
         if (words.size() < 3) {
-            return error();
+            return Encoder::error();
         }
 
         std::string column = words[0];
@@ -612,7 +612,7 @@ std::string Interpreter::update(std::vector<std::string> &words, std::string cur
         words.erase(words.begin());
 
         if (op != "=") {
-            return error();
+            return Encoder::error();
         }
 
         // Ak je nasledujseuce slovo ciarka tak ho odstran
@@ -641,26 +641,26 @@ std::string Interpreter::update(std::vector<std::string> &words, std::string cur
 
     size_t countOfUpdated = this->dbms->updateTable(tableName, valuesForUpdate, conditions, currentUser);
 
-    return success("Pocet aktualizovanych riadkov: " + std::to_string(countOfUpdated));
+    return Encoder::success("Pocet aktualizovanych riadkov: " + std::to_string(countOfUpdated));
 }
 
 
-// DELETE FROM table_name WHERE column_name = value
+// delete from table_name where stlpec = hodnota
 std::string Interpreter::deleteCommand(std::vector<std::string>& words, std::string currentUser) {
     if (words[0] != "from") {
-        return errorUnknownCommand();
+        return Encoder::errorUnknownCommand();
     }
 
     words.erase(words.begin());
 
     if (words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     std::string tableName = words[0];
     words.erase(words.begin());
 
-    // Spracovanie podmienok WHERE
+    // Spracovanie podmienok where
     std::vector<Condition> conditions;
     auto error = this->parseWhereConditions(words, conditions);
 
@@ -671,7 +671,57 @@ std::string Interpreter::deleteCommand(std::vector<std::string>& words, std::str
 
     size_t countOfDeleted = this->dbms->deleteFromTable(tableName, conditions, currentUser);
 
-    return success("Pocet zmazanych riadkov: " + std::to_string(countOfDeleted));
+    return Encoder::success("Pocet zmazanych riadkov: " + std::to_string(countOfDeleted));
+}
+
+
+// GRANT pravo ON tabulka TO pouzivatel
+std::string Interpreter::grant(std::vector<std::string> &words, std::string currentUser) {
+    std::string permission = words[0];
+    words.erase(words.begin());
+
+    if (words.size() < 4 || words[0] != "on") {
+        return Encoder::error();
+    }
+
+    std::string table = words[1];
+
+    if (words[2] != "to") {
+        return Encoder::error();
+    }
+
+    std::string user = words[3];
+
+    PermissionType permissionType = Permission::stringToPermissionType(permission);
+
+    this->dbms->grantPermission(user, table, permissionType, currentUser);
+
+    return Encoder::success("Pouzivatelovi " + user + " bolo pridelene pravo " + permission + " na tabulku " + table);
+}
+
+
+// REVOKE pravo ON tabulka FROM pouzivatel
+std::string Interpreter::revoke(std::vector<std::string> &words, std::string currentUser) {
+    std::string permission = words[0];
+    words.erase(words.begin());
+
+    if (words.size() < 4 || words[0] != "on") {
+        return Encoder::error();
+    }
+
+    std::string table = words[1];
+
+    if (words[2] != "from") {
+        return Encoder::error();
+    }
+
+    std::string user = words[3];
+
+    PermissionType permissionType = Permission::stringToPermissionType(permission);
+
+    this->dbms->revokePermission(user, table, permissionType, currentUser);
+
+    return Encoder::success("Pouzivatelovi " + user + " bolo odobrate pravo " + permission + " na tabulku " + table);
 }
 
 
@@ -728,15 +778,17 @@ std::string Interpreter::parseWhereConditions(std::vector<std::string>& words, s
     // Odstranenie slova where
     if (!words.empty()) {
         if (words[0] != "where") {
-            return error();
+            return Encoder::error();
         }
 
         words.erase(words.begin());
+    } else {
+        return "";
     }
 
     // Za slovom where musi nasledovat aspon jedna podmienka
     if (words.empty()) {
-        return error();
+        return Encoder::error();
     }
 
     // Spracuj podmienky, ktoré sú oddelené slovom "and"
@@ -744,7 +796,7 @@ std::string Interpreter::parseWhereConditions(std::vector<std::string>& words, s
 
         // Kontrola ci nasledujuce slova su aspon 3 (stlpec operator hodnota)
         if (words.size() < 3) {
-            return error();
+            return Encoder::error();
         }
 
         std::string column = words[0];
@@ -768,62 +820,9 @@ std::string Interpreter::parseWhereConditions(std::vector<std::string>& words, s
         if (words[0] == "and") {
             words.erase(words.begin());
         } else {
-            return error();
+            return Encoder::error();
         }
     }
 
     return "";
 }
-
-
-std::string Interpreter::success(std::string message) {
-    // TODO: odstranit priamy vypis na konzolu
-    std::cout << message << std::endl;
-
-    // TODO: vratit spravu vo formate pre klienta
-    return "";
-}
-
-
-std::string Interpreter::success(std::vector<std::vector<std::string>> &result) {
-    // TODO: odstranit priamy vypis na konzolu
-    for (auto row : result) {
-        for (auto item : row) {
-            std::cout << item << " ";
-        }
-        std::cout << std::endl;
-    }
-
-    // TODO: vratit spravu vo formate pre klienta
-    return "";
-}
-
-
-std::string Interpreter::error() {
-    // TODO: odstranit priamy vypis na konzolu
-    std::cout << "Chyba v prikaze!" << std::endl;
-
-    // TODO: vratit spravu vo formate pre klienta
-    // pozn. vratena sprava musi byt urcite rozna od prazdenho stringu! (vysledok parseWhereConditions sa kontroluje ci je rozny od "")
-    return "error";
-}
-
-
-std::string Interpreter::errorUnknownCommand() {
-    // TODO: odstranit priamy vypis na konzolu
-    std::cout << "Neznamy prikaz!" << std::endl;
-
-    // TODO: vratit spravu vo formate pre klienta
-    return "error";
-}
-
-
-std::string Interpreter::error(std::string message) {
-    // TODO: odstranit priamy vypis na konzolu
-    std::cout << message << std::endl;
-
-    // TODO: vratit spravu vo formate pre klienta
-    return "error";
-}
-
-

@@ -136,6 +136,10 @@ void DBMS::grantPermission(std::string targetUser, std::string tableName, Permis
         throw std::invalid_argument("Tabulka neexistuje!");
     }
 
+    if (targetUser == currentUser) {
+        throw std::invalid_argument("Vlastnik tabulky ma vsetky opravnenia!");
+    }
+
     // Kontrola ci uzivatel existuje v zozname pouzivatelov
     if (!this->userExists(targetUser)) {
         throw std::invalid_argument("Pouzivatel neexistuje!");
@@ -182,6 +186,10 @@ void DBMS::revokePermission(std::string targetUser, std::string tableName, Permi
 
     if (!tableExists) {
         throw std::invalid_argument("Tabulka neexistuje!");
+    }
+
+    if (targetUser == currentUser) {
+        throw std::invalid_argument("Vlastnik tabulky si nemoze odobrat opravnenie!");
     }
 
     // Kontrola ci uzivatel existuje v zozname pouzivatelov
@@ -343,15 +351,15 @@ void DBMS::dropTable(std::string tableName, std::string currentUser) {
  *
  * @return tables
  */
-std::vector<std::string> DBMS::getTablesList() {
-    std::vector<std::string> tableNames;
+std::vector<std::vector<std::string>> DBMS::getTablesList() {
+    std::vector<std::vector<std::string>> tableNamesWithOwners;
 
     tables.reserve(this->tables.size());
     for (auto table : this->tables) {
-        tableNames.push_back(table->getName());
+        tableNamesWithOwners.push_back({table->getName(), table->getOwner()});
     }
 
-    return tableNames;
+    return tableNamesWithOwners;
 }
 
 

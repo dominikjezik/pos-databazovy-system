@@ -45,7 +45,7 @@ public:
     // Table management
     void createTable(TableScheme& tableScheme);
     void dropTable(std::string tableName, std::string currentUser);
-    std::vector<std::string> getTablesList();
+    std::vector<std::vector<std::string>> getTablesList();
     std::vector<std::string> getTablesListCreatedByUser(const std::string& username);
     std::map<std::string, std::string> getTablesWithPermissions(std::string username);
 
