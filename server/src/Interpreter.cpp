@@ -55,6 +55,11 @@ std::string Interpreter::run(std::string command, std::string currentUser) {
 }
 
 
+bool Interpreter::tryLogin(std::string username, std::string password) {
+    return this->dbms->authorize(username, password);
+}
+
+
 std::string Interpreter::show(std::vector<std::string>& words) {
     if (words[0] == "tables") {
         if (words.size() == 1) {

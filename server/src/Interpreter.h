@@ -27,6 +27,7 @@ public:
     Interpreter();
     ~Interpreter();
     std::string run(std::string command, std::string currentUser);
+    bool tryLogin(std::string username, std::string password);
 };
 
 

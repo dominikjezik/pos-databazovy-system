@@ -672,40 +672,6 @@ size_t DBMS::deleteFromTable(std::string tableName, std::vector<Condition> condi
 }
 
 
-
-
-
-
-// Metoda iba na debugovanie, bude odstranena
-void DBMS::TEST_printState() {
-    // Vypis pouzivatelov
-    std::cout << "*** Pouzivatelia ***" << std::endl;
-    for (auto user : this->users) {
-        std::cout << user->getUsername() << std::endl;
-    }
-
-    // Vypis tabuliek
-    std::cout << "*** Tabulky ***" << std::endl;
-    for (auto table : this->tables) {
-        std::cout << table->getName() << " : " << table->getOwner() << std::endl;
-    }
-
-    // Vypis opravneni
-    std::cout << "*** Opravnenia ***" << std::endl;
-    for (auto permission : this->permissions) {
-        std::cout << permission.first << std::endl;
-
-        for (auto tablePermission : permission.second) {
-            std::cout << "\t" << tablePermission.first << std::endl;
-
-            for (auto permissionType : tablePermission.second) {
-                std::cout << "\t\t" << permissionType << std::endl;
-            }
-        }
-    }
-}
-
-
 bool DBMS::tableExists(const std::string& tableName) {
     for (const auto& table : this->tables) {
         if (table->getName() == tableName) {

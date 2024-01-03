@@ -1,32 +1,45 @@
 #include <iostream>
-#include <iomanip>
-#include "src/DBMS.h"
 #include "src/Interpreter.h"
 #include "src/Decoder.h"
 
 void vypisLogo();
+void seedUser(Interpreter& interpreter, std::string user, std::string password);
 void seedUsersTable(Interpreter& interpreter, std::string user);
 void seedPostsTable(Interpreter& interpreter, std::string user);
 void seedDatatypesTable(Interpreter& interpreter, std::string user);
 
 int main() {
-
     vypisLogo();
 
     Interpreter interpreter;
 
     std::string currentUser;
+    std::string password;
 
-    std::cout << "username> ";
-    std::getline(std::cin, currentUser);
+    bool isLoggedIn = false;
 
+    while(!isLoggedIn) {
+        std::cout << "username> ";
+        std::getline(std::cin, currentUser);
+
+        std::cout << currentUser << "'s password> ";
+        std::getline(std::cin, password);
+
+        //seedUser(interpreter, currentUser, password);
+
+        isLoggedIn = interpreter.tryLogin(currentUser, password);
+
+        if (!isLoggedIn) {
+            std::cout << "Invalid username or password!" << std::endl;
+        }
+    }
+    
     //seedUsersTable(interpreter, currentUser);
     //seedPostsTable(interpreter, currentUser);
     //seedDatatypesTable(interpreter, currentUser);
 
     std::string command;
 
-    // nacitanie cez cin
     while (true) {
         std::cout << "DB> ";
         std::getline(std::cin, command);
@@ -40,15 +53,11 @@ int main() {
         std::cout << std::endl;
     }
 
-
     return 0;
+}
 
-    DBMS dbms;
-
-    dbms.TEST_printState();
-
-    std::cout << "Hello, World!" << std::endl;
-    return 0;
+void seedUser(Interpreter& interpreter, std::string user, std::string password) {
+    interpreter.run("create user " + user + " identified by " + password, "");
 }
 
 void seedUsersTable(Interpreter& interpreter, std::string user) {

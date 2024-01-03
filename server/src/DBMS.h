@@ -54,9 +54,6 @@ public:
     void insertIntoTable(std::string tableName, std::map<std::string, std::string> newRecord, std::string currentUser);
     size_t updateTable(std::string tableName, std::map<std::string, std::string> newValues, std::vector<Condition> conditions, std::string currentUser);
     size_t deleteFromTable(std::string tableName, std::vector<Condition> conditions, std::string currentUser);
-
-
-    void TEST_printState();
 };
 
 

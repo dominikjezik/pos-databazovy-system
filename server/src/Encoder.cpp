@@ -1,18 +1,5 @@
 #include "Encoder.h"
 
-/*
- * Nech sa vratia vysledky v tomto formate:
- * status_kod;data
- * - v pripade success:
- * 0;typ_vysledku;data
- * 0;0;sprava - v pripade odoslania spravy klientovi
- * 0;1;pocet_riadkov;pocet_stlpcov;bunka1;bunka2;bunka3;... - v pripade tabulky bez spravy
- * 0;2;pocet_riadkov;pocet_stlpcov;sprava;bunka1;bunka2;bunka3;... - v pripade tabulky so spravou
- *
- * - v pripade error:
- * 1;chybova sprava
- */
-
 std::string Encoder::success(std::string message) {
     return "0;0;" + message;
 }

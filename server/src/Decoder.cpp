@@ -73,7 +73,11 @@ void Decoder::decodeAndPrint(std::string encodedString) {
 }
 
 void Decoder::printTable(size_t rows, size_t columns, std::vector<std::string> &data) {
-    // TODO: Kontrola ci sedia rozmery tabulky s datami
+    // Kontrola ci sedia rozmery tabulky s datami
+    if (rows * columns != data.size()) {
+        std::cout << "Chyba pri dekodovani spravy!" << std::endl;
+        return;
+    }
 
     // Vypocet sirky kazdeho stlpca
     std::vector<size_t> columnWidths(columns, 0);
