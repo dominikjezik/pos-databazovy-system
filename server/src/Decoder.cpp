@@ -73,10 +73,13 @@ void Decoder::decodeAndPrint(std::string encodedString) {
 }
 
 void Decoder::printTable(size_t rows, size_t columns, std::vector<std::string> &data) {
-    // Kontrola ci sedia rozmery tabulky s datami
+    // Kontrola ci sedia rozmery tabulky s datami ak nie doplnia sa prazdne bunky
     if (rows * columns != data.size()) {
-        std::cout << "Chyba pri dekodovani spravy!" << std::endl;
-        return;
+        size_t missingCells = rows * columns - data.size();
+
+        for (size_t i = 0; i < missingCells; i++) {
+            data.push_back("");
+        }
     }
 
     // Vypocet sirky kazdeho stlpca
