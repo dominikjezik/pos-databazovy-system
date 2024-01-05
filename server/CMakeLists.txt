@@ -26,7 +26,6 @@ add_executable(databazovy_system main.cpp
         src/pos_sockets/passive_socket.h
         src/pos_sockets/char_buffer.c
         src/pos_sockets/char_buffer.h
-        src/pos_sockets/linked_list.h
-        ../client/main.cpp)
+        src/pos_sockets/linked_list.h)
 
 target_link_libraries(databazovy_system pthread)
