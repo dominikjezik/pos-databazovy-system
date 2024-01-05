@@ -1,0 +1,4 @@
+# ninja log v5
+10	508	7261844040534050	CMakeFiles/client.dir/main.cpp.obj	55ca3d3bc1ef75f
+1	731	7261844042774034	CMakeFiles/client.dir/src/sockets/my_socket.cpp.obj	31fde90692586133
+732	1252	7261844047867029	client.exe	b6aaaaeb3daa0a08

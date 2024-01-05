@@ -1,0 +1,3 @@
+C:/Users/Alan/projectsOfProgramming/CLion/pos/pos-databazovy-system/client/cmake-build-debugvs/CMakeFiles/client.dir
+C:/Users/Alan/projectsOfProgramming/CLion/pos/pos-databazovy-system/client/cmake-build-debugvs/CMakeFiles/edit_cache.dir
+C:/Users/Alan/projectsOfProgramming/CLion/pos/pos-databazovy-system/client/cmake-build-debugvs/CMakeFiles/rebuild_cache.dir
