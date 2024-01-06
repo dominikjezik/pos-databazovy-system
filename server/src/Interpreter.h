@@ -21,13 +21,14 @@ private:
     std::string grant(std::vector<std::string>& words, std::string currentUser);
     std::string revoke(std::vector<std::string>& words, std::string currentUser);
 
-    void parseCommand(std::string command, std::vector<std::string>& words);
+    std::string parseCommand(std::string command, std::vector<std::string>& words);
     std::string parseWhereConditions(std::vector<std::string>& words, std::vector<Condition>& conditions);
 public:
     Interpreter();
     ~Interpreter();
     std::string run(std::string command, std::string currentUser);
     bool tryLogin(std::string username, std::string password);
+    bool tryRegister(std::string username, std::string password);
 };
 
 
