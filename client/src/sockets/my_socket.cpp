@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <ws2tcpip.h>
 #include <winsock2.h>
+#include <iostream>
 
 #define SOCKET_TERMINATE_CHAR '\0'
 
