@@ -3,10 +3,8 @@
 #include "src/Decoder.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <strings.h>
-#include <cstring>
 #include <pthread.h>
 #include <unistd.h>
 #include <bits/stdc++.h>
@@ -20,282 +18,211 @@ extern "C" {
 }
 #endif
 
-#include "src/buffer.h"
-#include "src/pos_sockets/linked_list.h"
-
-typedef struct thread_data {
-    pthread_mutex_t mutex;
-    short port;
-    ACTIVE_SOCKET* my_socket;
-} THREAD_DATA;
-
-void thread_data_init(struct thread_data* data, short port, ACTIVE_SOCKET* my_socket) {
-    pthread_mutex_init(&data->mutex, NULL);
-    data->port = port;
-    data->my_socket = my_socket;
-}
-
-void thread_data_destroy(struct thread_data* data) {
-    pthread_mutex_destroy(&data->mutex);
-
-    data->port = 0;
-    data->my_socket = NULL;
-}
-
-void* process_client_data(void* thread_data) {
-    struct thread_data* data = (struct thread_data*)thread_data;
-    PASSIVE_SOCKET sock;
-    passive_socket_init(&sock);
-    //mozno toto passive_socket_start_listening budem musiet dat do samostnatneho vlakna, lebo je to asi blokujuce volanie
-    passive_socket_start_listening(&sock, data->port);
-    //mozem spravit while cyklus, kde bude podmienka passive_socket_is_listening bude vraciat true, tak sa bude stale volat metoda passive_socket_wait_for_client
-    //v tomto while cykle budem rovno vytvarat dalsie vlakna, ktore budu vykonavat metodu start_reading
-    passive_socket_wait_for_client(&sock, data->my_socket);
-    //tieto dve metody passive_socket_stop_listening a passive_socket_destroy presuniem niekde inde. Budem je volat, ked sa staci klavesa Q
-    passive_socket_stop_listening(&sock);
-    passive_socket_destroy(&sock);
-
-    //pri tejto metode active_socket_start_reading to zastane, lebo je to blokujuce volanie. Skonci to až pri stop_reading
-    //pre viacerych klientov tu nemoze byt takto to start_reading. Potrebujem to pre kazdeho klienta ako osobitne vlakno
-
-    active_socket_start_reading(data->my_socket);
-
-    return NULL;
-}
-
-//TODO: dat prec
-void* write_to_client(void* thread_data) {
-    struct thread_data *data = (struct thread_data *) thread_data;
-    printf("Ide piiisat\n");
-
-    sleep(10);
-    if (data->my_socket != NULL) {
-        printf("Spojenieee\n");
-        CHAR_BUFFER bufferPreZapis;
-        char_buffer_init(&bufferPreZapis);
-
-        char_buffer_append(&bufferPreZapis, "Ahoj svet", strlen("Ahoj svet"));
-        active_socket_write_data(data->my_socket, &bufferPreZapis);
-        printf("Poslalo 1. správu\n");
-
-        char_buffer_clear(&bufferPreZapis);
-        char_buffer_append(&bufferPreZapis, "Funguuuj 111", strlen("Funguuuj 111"));
-        active_socket_write_data(data->my_socket, &bufferPreZapis);
-        printf("Poslalo 2. správu\n");
-
-        char_buffer_clear(&bufferPreZapis);
-        char_buffer_append(&bufferPreZapis, "Funguuuj 222", strlen("Funguuuj 222"));
-        active_socket_write_data(data->my_socket, &bufferPreZapis);
-        printf("Poslalo 3. správu\n");
-
-        char_buffer_clear(&bufferPreZapis);
-        char_buffer_append(&bufferPreZapis, "Funguuuj", strlen("Funguuuj"));
-        active_socket_write_data(data->my_socket, &bufferPreZapis);
-        printf("Poslalo 4. správu\n");
-
-        active_socket_write_end_message(data->my_socket);
-        printf("Poslalo 5. správu\n");
-
-        // Po použití treba zničiť buffer
-        char_buffer_destroy(&bufferPreZapis);
-
-        //nemozem ihneď zničiť socket, lebo klient si tu nemusí stihnúť prečitať
-        sleep(5);
-        active_socket_destroy(data->my_socket);
-        sleep(10);
-
-        //active_socket_stop_reading(data->my_socket);
-    } else {
-        printf("Nepripojil sa klient\n");
-    }
-
-    return NULL;
-}
-
 void vypisLogo();
 void seedUser(Interpreter& interpreter, std::string user, std::string password);
 void seedUsersTable(Interpreter& interpreter, std::string user);
 void seedPostsTable(Interpreter& interpreter, std::string user);
 void seedDatatypesTable(Interpreter& interpreter, std::string user);
 
+typedef struct thread_data {
+    //pthread_mutex_t mutex;
+    std::mutex mutex;
+    short port;
+} THREAD_DATA;
+
+void thread_data_init(struct thread_data* data, short port) {
+    //pthread_mutex_init(&data->mutex, NULL);
+    data->port = port;
+}
+
+void thread_data_destroy(struct thread_data* data) {
+    //pthread_mutex_destroy(&data->mutex);
+    data->port = 0;
+}
+
+void* process_client_data(void* thread_data);
+void* read_from_one_client(ACTIVE_SOCKET* my_socket);
+void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SOCKET* passiveSocket);
+
 int main() {
     vypisLogo();
 
-    Interpreter interpreter;
-
-    std::string currentUser;
-    std::string password;
-
-    pthread_t th_receive, th_write;
+    pthread_t th_receive;
     struct thread_data data;
-    //TODO: do štruktúry data musím dať vector active_sockets
-    struct active_socket my_socket;
-
-    //TODO: tento konstruktor pre aktiviny soket budem volat vo vlakne
-    //TODO: vsetky tie aktivne sokety budem musiet zabalit do struktury, ktora bude este v sebe mat ID toho clienta, napr. jeho IP
-    //TODO: ??????? treba si toto este poriadne premysliet, lebo uplne netusim ????????????
-    //TODO: ALEBO kazde vlakno bude mat osobitne pridelene svoje thread_data, cize tie data nebudu zdielane medzi viacerymi vlaknami
-    //TODO: jedno vlakno bude mat teda svoje vlastna data, kde bude aktivny socket PLUS budu mat aj zdielane data, v ktorych bude prikaz pre ukoncenie vsetkych vlakien, cize znicenie aktivneho socketu. To nastane, ked pride :end sprava
-    active_socket_init(&my_socket);
-    //TODO: !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! vyskúšať najskôr. Danovi sa nedali pripojiť dvaja klienti na jeden port !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    thread_data_init(&data, 12731, &my_socket);
+    thread_data_init(&data, 12730);
 
     pthread_create(&th_receive, NULL, process_client_data, &data);
-    //TODO: th_write pojde prec
-    //pthread_create(&th_write, NULL, write_to_client, &data);
 
+    pthread_join(th_receive, NULL);
+    thread_data_destroy(&data);
+
+    return 0;
+}
+
+void* process_client_data(void* thread_data) {
+    struct thread_data* data = (struct thread_data*)thread_data;
+    PASSIVE_SOCKET sock;
+    passive_socket_init(&sock);
+    passive_socket_start_listening(&sock, data->port);
+
+    std::vector<std::thread*> threadsForClients;
+    std::vector<active_socket*> activeSocketsForClients;
+
+    while (passive_socket_is_listening(&sock)) {
+        struct active_socket* my_socket = new struct active_socket();
+        active_socket_init(my_socket);
+        activeSocketsForClients.push_back(my_socket);
+        passive_socket_wait_for_client(&sock, my_socket);
+        if (!passive_socket_is_listening(&sock)) {
+            break;
+        }
+        std::thread* th_read = new std::thread(read_from_one_client, my_socket);
+        std::thread* th_process = new std::thread(process_one_client, thread_data, my_socket, &sock);
+        threadsForClients.push_back(th_read);
+        threadsForClients.push_back(th_process);
+    }
+
+    for (std::thread* threadForClient : threadsForClients) {
+        threadForClient->join();
+    }
+
+    for (int i = 0; i < threadsForClients.size(); i++) {
+        delete threadsForClients[i];
+        threadsForClients[i] = nullptr;
+    }
+
+    for (int i = 0; i < activeSocketsForClients.size(); i++) {
+        delete activeSocketsForClients[i];
+        activeSocketsForClients[i] = nullptr;
+    }
+
+    return NULL;
+}
+
+void* read_from_one_client(ACTIVE_SOCKET* my_socket) {
+    std::cout << "Cita data z klienta s aktivnym socketom: " << my_socket->socket_descriptor << std::endl;
+    //tu stoji program, pokial sa z aktivneho socketu cita
+    active_socket_start_reading(my_socket);
+    std::cout << "Skoncil citanie dat z klienta s aktivnym socketom: " << my_socket->socket_descriptor << std::endl;
+
+    return NULL;
+}
+
+void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SOCKET* passiveSocket) {
+    struct thread_data *data = (struct thread_data *) thread_data;
+
+    Interpreter interpreter;
+    std::string currentUser;
+    std::string password;
     if (&my_socket != NULL) {
         printf("Soket je nastaveny\n");
-        //pokial aktivny soket cita este data (nebola priajata end message od klienta), tak stale bude vytahovat data do client_pi_estimaton
-        //pre viacerych klientov to musim spravit tak, ze budem vytvarat vlakna, ktore budu vykonavat to try_get_client_pi_estimation
-        //budú mať nad sebou, hento že while (active_socket_is_reading(data->my_socket))
-        //tieto vlakna ASI budu mat zdielane data, v ktorych bude buffer pre aktivne sockety, cize vtedy tam budem musiet riesit MUTEX pre pristup a zapis do toho buffera
-        //ALEBO kazde vlakno bude mat osobitne pridelene svoje thread_data, cize tie data nebudu zdielane medzi viacerymi vlaknami
         bool pokracujCitanie = true;
         while (pokracujCitanie) {
-            while (active_socket_is_reading(&my_socket)) {
+            while (active_socket_is_reading(my_socket)) {
                 CHAR_BUFFER buf;
                 char_buffer_init(&buf);
-                if (active_socket_try_get_read_data(&my_socket, &buf)) {
+                if (active_socket_try_get_read_data(my_socket, &buf)) {
                     printf("Precital zo socktu\n");
-
-
-
-
-
-
-//                    char vypisSpravy[10000];
-//                    //sscanf(buf.data, "%s", vypisSpravy);
-//                    sscanf(buf.data, "%[^\t\n]", vypisSpravy); //precita vsetko okrem tabs a newlines
-//                    size_t dlzkaVypisuSpravy = strlen(vypisSpravy);
-//                    std::vector<char> filtrovaneData;
-//                    //odstranenie prazdnych znakov na konci spravy pomocou vektora a metody strlen
-//                    for (size_t i = 0; i < dlzkaVypisuSpravy; ++i) {
-//                        filtrovaneData.push_back(vypisSpravy[i]);
-//                    }
-//
-//                    printf("Sprava od klienta: ");
-//                    for (char znak : filtrovaneData) {
-//                        std::cout << znak;
-//                    }
-
-
-
-
-                    if (active_socket_is_end_message(&my_socket, &buf)) {
+                    if (active_socket_is_end_message(my_socket, &buf)) {
                         printf("UKONCOVACIA SPRAVA\n");
-                        active_socket_stop_reading(&my_socket);
+                        active_socket_stop_reading(my_socket);
                         pokracujCitanie = false;
-                        //TODO: tento cely while asi budu samostatne vlakna pre jednotlivych klientov
-                        //TODO: asi urcite to tak bude, lebo su sa preberaju vsetky prijate spravy a aj posielaju dalsie naspat
-                        active_socket_destroy(data.my_socket);
+                        active_socket_destroy(my_socket);
                     } else {
-                        //TODO: preco mu nevadi take male pole charov???? aj tak sa tam zmesti hocico
-                        //char vypisSpravy[100000];
-                        //sscanf(buf.data, "%[^\t\n]", vypisSpravy); //precita vsetko okrem tabs a newlines
-                        //size_t dlzkaVypisuSpravy = strlen(buf.data);
                         std::vector<char> filtrovaneData;
-                        //odstranenie prazdnych znakov na konci spravy pomocou vektora a metody strlen
                         for (size_t i = 0; i < buf.size; ++i) {
                             filtrovaneData.push_back(buf.data[i]);
                         }
-
-                        //TODO: pojde prec
-//                        printf("Sprava od klienta: ");
-//                        for (char znak : filtrovaneData) {
-//                            std::cout << znak;
-//                        }
 
                         std::string filtrovanyString;
                         for (size_t i = 0; i < filtrovaneData.size(); ++i) {
                             filtrovanyString += filtrovaneData[i];
                         }
 
-                        // Use find function to find 1st position of delimiter.
+                        std::vector<std::string> vyslednyVektorSprav;
+
                         int end = filtrovanyString.find(";");
                         while (end != -1) { // Loop until no delimiter is left in the string.
-                            //Tu su tie prvotne kody ako 0;0; alebo 0;1;
-                            //std::cout << filtrovanyString.substr(0, end) << std::endl;
+                            vyslednyVektorSprav.push_back(filtrovanyString.substr(0, end));
                             filtrovanyString.erase(filtrovanyString.begin(), filtrovanyString.begin() + end + 1);
                             end = filtrovanyString.find(";");
                         }
-
-                        //NASLEDUJE STRING bez uvodných 0;0;
-                        std::string stringBezZaciatku = filtrovanyString.substr(0, end);
-                        std::vector<std::string> vectorBezZaciatku;
-                        end = stringBezZaciatku.find("$");
-                        while (end != -1) { // Loop until no delimiter is left in the string.
-                            vectorBezZaciatku.push_back(stringBezZaciatku.substr(0, end));
-                            stringBezZaciatku.erase(stringBezZaciatku.begin(), stringBezZaciatku.begin() + end + 1);
-                            end = stringBezZaciatku.find("$");
-                        }
-                        vectorBezZaciatku.push_back(stringBezZaciatku.substr(0, end));
-
-
-//                        //TODO: pojde prec
-//                        std::cout << "Poslpitovanyyyy vectoooor" << std::endl;
-//                        for (std::string znak : vectorBezZaciatku) {
-//                            std::cout << znak << std::endl;
-//                        }
+                        vyslednyVektorSprav.push_back(filtrovanyString.substr(0, end));
 
                         //spracovavanie spravy, ked klient NIE je prihlaseny
                         if (currentUser.empty()) {
-                            if (vectorBezZaciatku[0] == "TRYLOGIN") {
+                            if (vyslednyVektorSprav[2] == "TRYLOGIN") {
                                 std::cout << "Klient ziada o prihlásenie sa" << std::endl;
-                                bool isLoggedIn = interpreter.tryLogin(vectorBezZaciatku[1], vectorBezZaciatku[2]);
+                                std::unique_lock<std::mutex> lock(data->mutex);
+                                bool isLoggedIn = interpreter.tryLogin(vyslednyVektorSprav[3], vyslednyVektorSprav[4]);
+                                lock.unlock();
                                 sleep(1);
 
                                 CHAR_BUFFER bufferPreZapis;
                                 char_buffer_init(&bufferPreZapis);
                                 if (isLoggedIn) {
-                                    char_buffer_append(&bufferPreZapis, "0;0;TRYLOGIN$TRUE", strlen("0;0;TRYLOGIN$TRUE"));
+                                    char_buffer_append(&bufferPreZapis, "0;0;TRYLOGIN;TRUE", strlen("0;0;TRYLOGIN;TRUE"));
                                     //POMOCOU TOHTO currentUser SA POSIELAJU SQL PRIKAZY
-                                    currentUser = vectorBezZaciatku[1];
-                                    password = vectorBezZaciatku[2];
+                                    currentUser = vyslednyVektorSprav[3];
+                                    password = vyslednyVektorSprav[4];
                                 } else {
-                                    char_buffer_append(&bufferPreZapis, "0;0;TRYLOGIN$FALSE", strlen("0;0;TRYLOGIN$FALSE"));
+                                    char_buffer_append(&bufferPreZapis, "0;0;TRYLOGIN;FALSE", strlen("0;0;TRYLOGIN;FALSE"));
                                 }
 
-                                active_socket_write_data(data.my_socket, &bufferPreZapis);
-                            } else if (vectorBezZaciatku[0] == "TRYREGISTER") {
+//                                 seedUsersTable(interpreter, currentUser);
+//                                 seedPostsTable(interpreter, currentUser);
+//                                 seedDatatypesTable(interpreter, currentUser);
+
+                                active_socket_write_data(my_socket, &bufferPreZapis);
+                            } else if (vyslednyVektorSprav[2] == "TRYREGISTER") {
                                 std::cout << "Klient ziada o registraciu" << std::endl;
-                                bool successOnRegistration = interpreter.tryRegister(vectorBezZaciatku[1], vectorBezZaciatku[2]);
+                                std::unique_lock<std::mutex> lock(data->mutex);
+                                bool successOnRegistration = interpreter.tryRegister(vyslednyVektorSprav[3], vyslednyVektorSprav[4]);
+                                lock.unlock();
                                 sleep(1);
 
                                 CHAR_BUFFER bufferPreZapis;
                                 char_buffer_init(&bufferPreZapis);
                                 if (successOnRegistration) {
-                                    char_buffer_append(&bufferPreZapis, "0;0;TRYREGISTER$TRUE", strlen("0;0;TRYREGISTER$TRUE"));
+                                    char_buffer_append(&bufferPreZapis, "0;0;TRYREGISTER;TRUE", strlen("0;0;TRYREGISTER;TRUE"));
                                     //POMOCOU TOHTO currentUser SA POSIELAJU SQL PRIKAZY
-                                    currentUser = vectorBezZaciatku[1];
-                                    password = vectorBezZaciatku[2];
+                                    currentUser = vyslednyVektorSprav[3];
+                                    password = vyslednyVektorSprav[4];
                                 } else {
-                                    char_buffer_append(&bufferPreZapis, "0;0;TRYREGISTER$FALSE", strlen("0;0;TRYREGISTER$FALSE"));
+                                    char_buffer_append(&bufferPreZapis, "0;0;TRYREGISTER;FALSE", strlen("0;0;TRYREGISTER;FALSE"));
                                 }
 
-                                active_socket_write_data(data.my_socket, &bufferPreZapis);
+                                active_socket_write_data(my_socket, &bufferPreZapis);
                             } else {
                                 std::cout << "Klient poslal nezmysuplnu spravu" << std::endl;
                             }
                             //spracovavanie spravy, ked klient JE prihlaseny
                         } else {
-                            if (vectorBezZaciatku[0] == "TRYSQL") {
+                            if (vyslednyVektorSprav[2] == "TRYSQL") {
                                 std::cout << "Klient ziada aktivovat SQL prikaz" << std::endl;
-                                std::cout << vectorBezZaciatku[0] << std::endl;
-                                std::cout << vectorBezZaciatku[1] << std::endl;
-                                std::string vysledokSQLString = interpreter.run(vectorBezZaciatku[1], currentUser);
+                                std::cout << vyslednyVektorSprav[3] << std::endl;
+                                std::unique_lock<std::mutex> lock(data->mutex);
+                                std::string vysledokSQLString = interpreter.run(vyslednyVektorSprav[3], currentUser);
+                                lock.unlock();
 
                                 CHAR_BUFFER bufferPreZapis;
                                 char_buffer_init(&bufferPreZapis);
                                 const char* vysledokSQL = vysledokSQLString.c_str();
                                 char_buffer_append(&bufferPreZapis, vysledokSQL, strlen(vysledokSQL));
-                                active_socket_write_data(data.my_socket, &bufferPreZapis);
+                                active_socket_write_data(my_socket, &bufferPreZapis);
+                            } else if (vyslednyVektorSprav[2] == "STOPLISTENING") {
+                                if (passive_socket_is_listening(passiveSocket)) {
+                                    passive_socket_stop_listening(passiveSocket);
+                                    passive_socket_destroy(passiveSocket);
+                                    std::cout << "Server prestal prijimat dalsich klientov" << std::endl;
+                                    std::cout << "Server skonci, ked sa vsetci postupne odpoja" << std::endl;
+                                } else {
+                                    std::cout << "Server uz nejaku dobu neprijima dalsich klientov" << std::endl;
+                                }
                             } else {
                                 std::cout << "Klient poslal nezmysuplnu spravu" << std::endl;
                             }
                         }
-
-
                         printf("\n");
                     }
                 }
@@ -303,59 +230,7 @@ int main() {
         }
     }
 
-    pthread_join(th_receive, NULL);
-    //TODO: th_write pojde prec
-    //pthread_join(th_write, NULL);
-
-    thread_data_destroy(&data);
-
-
-
-
-
-//    Interpreter interpreter;
-//
-//    std::string currentUser;
-//    std::string password;
-//
-//    bool isLoggedIn = false;
-//
-//    while(!isLoggedIn) {
-//        std::cout << "username> ";
-//        std::getline(std::cin, currentUser);
-//
-//        std::cout << currentUser << "'s password> ";
-//        std::getline(std::cin, password);
-//
-//        //seedUser(interpreter, currentUser, password);
-//
-//        isLoggedIn = interpreter.tryLogin(currentUser, password);
-//
-//        if (!isLoggedIn) {
-//            std::cout << "Invalid username or password!" << std::endl;
-//        }
-//    }
-//
-//    //seedUsersTable(interpreter, currentUser);
-//    //seedPostsTable(interpreter, currentUser);
-//    //seedDatatypesTable(interpreter, currentUser);
-//
-//    std::string command;
-//
-//    while (true) {
-//        std::cout << "DB> ";
-//        std::getline(std::cin, command);
-//
-//        if (command == "exit") {
-//            break;
-//        }
-//
-//        std::string result = interpreter.run(command, currentUser);
-//        Decoder::decodeAndPrint(result);
-//        std::cout << std::endl;
-//    }
-
-    return 0;
+    return NULL;
 }
 
 void seedUser(Interpreter& interpreter, std::string user, std::string password) {

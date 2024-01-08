@@ -6,6 +6,7 @@
 #include "Encoder.h"
 #include <sstream>
 
+
 class Interpreter {
 private:
     DBMS* dbms;

@@ -56,6 +56,8 @@ std::string Interpreter::run(std::string command, std::string currentUser) {
     } catch (std::exception& e) {
         return Encoder::error(std::string(e.what()));
     }
+
+
 }
 
 
