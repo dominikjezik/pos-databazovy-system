@@ -12,7 +12,11 @@ Interpreter::~Interpreter() {
 std::string Interpreter::run(std::string command, std::string currentUser) {
     // Rozdel prikaz na slova
     std::vector<std::string> words;
-    this->parseCommand(command, words);
+    auto error = this->parseCommand(command, words);
+
+    if (error != "") {
+        return error;
+    }
 
     if (words.empty()) {
         return "";
@@ -52,11 +56,17 @@ std::string Interpreter::run(std::string command, std::string currentUser) {
     } catch (std::exception& e) {
         return Encoder::error(std::string(e.what()));
     }
+
+
 }
 
 
 bool Interpreter::tryLogin(std::string username, std::string password) {
     return this->dbms->authorize(username, password);
+}
+
+bool Interpreter::tryRegister(std::string username, std::string password) {
+    return this->dbms->createUser(username, password);
 }
 
 
@@ -736,13 +746,17 @@ std::string Interpreter::revoke(std::vector<std::string> &words, std::string cur
  * @param command
  * @param words
  */
-void Interpreter::parseCommand(std::string command, std::vector<std::string>& words) {
+std::string Interpreter::parseCommand(std::string command, std::vector<std::string>& words) {
     bool uvodzovky = false;
 
     int indexKoncaPoslednehoSlova = 0;
 
     for (int i = 0; i < command.length(); i++) {
         auto aktualnyZnak = command[i];
+
+        if (aktualnyZnak == ';') {
+            return Encoder::error("Nepovoleny znak bodkociarka");
+        }
 
         if (aktualnyZnak == '"' && !uvodzovky) {
             uvodzovky = true;
@@ -776,6 +790,8 @@ void Interpreter::parseCommand(std::string command, std::vector<std::string>& wo
     if (!slovo.empty()) {
         words.push_back(slovo);
     }
+
+    return "";
 }
 
 

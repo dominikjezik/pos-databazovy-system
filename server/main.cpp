@@ -1,6 +1,22 @@
 #include <iostream>
 #include "src/Interpreter.h"
 #include "src/Decoder.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <bits/stdc++.h>
+
+#ifdef __cplusplus
+extern "C" {
+#include "src/pos_sockets/active_socket.h"
+#include "src/pos_sockets/char_buffer.h"
+#include "src/pos_sockets/passive_socket.h"
+
+}
+#endif
 
 void vypisLogo();
 void seedUser(Interpreter& interpreter, std::string user, std::string password);
@@ -8,52 +24,213 @@ void seedUsersTable(Interpreter& interpreter, std::string user);
 void seedPostsTable(Interpreter& interpreter, std::string user);
 void seedDatatypesTable(Interpreter& interpreter, std::string user);
 
+typedef struct thread_data {
+    //pthread_mutex_t mutex;
+    std::mutex mutex;
+    short port;
+} THREAD_DATA;
+
+void thread_data_init(struct thread_data* data, short port) {
+    //pthread_mutex_init(&data->mutex, NULL);
+    data->port = port;
+}
+
+void thread_data_destroy(struct thread_data* data) {
+    //pthread_mutex_destroy(&data->mutex);
+    data->port = 0;
+}
+
+void* process_client_data(void* thread_data);
+void* read_from_one_client(ACTIVE_SOCKET* my_socket);
+void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SOCKET* passiveSocket);
+
 int main() {
     vypisLogo();
 
-    Interpreter interpreter;
+    pthread_t th_receive;
+    struct thread_data data;
+    thread_data_init(&data, 12730);
 
-    std::string currentUser;
-    std::string password;
+    pthread_create(&th_receive, NULL, process_client_data, &data);
 
-    bool isLoggedIn = false;
-
-    while(!isLoggedIn) {
-        std::cout << "username> ";
-        std::getline(std::cin, currentUser);
-
-        std::cout << currentUser << "'s password> ";
-        std::getline(std::cin, password);
-
-        //seedUser(interpreter, currentUser, password);
-
-        isLoggedIn = interpreter.tryLogin(currentUser, password);
-
-        if (!isLoggedIn) {
-            std::cout << "Invalid username or password!" << std::endl;
-        }
-    }
-    
-    //seedUsersTable(interpreter, currentUser);
-    //seedPostsTable(interpreter, currentUser);
-    //seedDatatypesTable(interpreter, currentUser);
-
-    std::string command;
-
-    while (true) {
-        std::cout << "DB> ";
-        std::getline(std::cin, command);
-
-        if (command == "exit") {
-            break;
-        }
-
-        std::string result = interpreter.run(command, currentUser);
-        Decoder::decodeAndPrint(result);
-        std::cout << std::endl;
-    }
+    pthread_join(th_receive, NULL);
+    thread_data_destroy(&data);
 
     return 0;
+}
+
+void* process_client_data(void* thread_data) {
+    struct thread_data* data = (struct thread_data*)thread_data;
+    PASSIVE_SOCKET sock;
+    passive_socket_init(&sock);
+    passive_socket_start_listening(&sock, data->port);
+
+    std::vector<std::thread*> threadsForClients;
+    std::vector<active_socket*> activeSocketsForClients;
+
+    while (passive_socket_is_listening(&sock)) {
+        struct active_socket* my_socket = new struct active_socket();
+        active_socket_init(my_socket);
+        activeSocketsForClients.push_back(my_socket);
+        passive_socket_wait_for_client(&sock, my_socket);
+        if (!passive_socket_is_listening(&sock)) {
+            break;
+        }
+        std::thread* th_read = new std::thread(read_from_one_client, my_socket);
+        std::thread* th_process = new std::thread(process_one_client, thread_data, my_socket, &sock);
+        threadsForClients.push_back(th_read);
+        threadsForClients.push_back(th_process);
+    }
+
+    for (std::thread* threadForClient : threadsForClients) {
+        threadForClient->join();
+    }
+
+    for (int i = 0; i < threadsForClients.size(); i++) {
+        delete threadsForClients[i];
+        threadsForClients[i] = nullptr;
+    }
+
+    for (int i = 0; i < activeSocketsForClients.size(); i++) {
+        delete activeSocketsForClients[i];
+        activeSocketsForClients[i] = nullptr;
+    }
+
+    return NULL;
+}
+
+void* read_from_one_client(ACTIVE_SOCKET* my_socket) {
+    std::cout << "Cita data z klienta s aktivnym socketom: " << my_socket->socket_descriptor << std::endl;
+    //tu stoji program, pokial sa z aktivneho socketu cita
+    active_socket_start_reading(my_socket);
+    std::cout << "Skoncil citanie dat z klienta s aktivnym socketom: " << my_socket->socket_descriptor << std::endl;
+
+    return NULL;
+}
+
+void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SOCKET* passiveSocket) {
+    struct thread_data *data = (struct thread_data *) thread_data;
+
+    Interpreter interpreter;
+    std::string currentUser;
+    std::string password;
+    if (&my_socket != NULL) {
+        printf("Soket je nastaveny\n");
+        bool pokracujCitanie = true;
+        while (pokracujCitanie) {
+            while (active_socket_is_reading(my_socket)) {
+                CHAR_BUFFER buf;
+                char_buffer_init(&buf);
+                if (active_socket_try_get_read_data(my_socket, &buf)) {
+                    printf("Precital zo socktu\n");
+                    if (active_socket_is_end_message(my_socket, &buf)) {
+                        printf("UKONCOVACIA SPRAVA\n");
+                        active_socket_stop_reading(my_socket);
+                        pokracujCitanie = false;
+                        active_socket_destroy(my_socket);
+                    } else {
+                        std::vector<char> filtrovaneData;
+                        for (size_t i = 0; i < buf.size; ++i) {
+                            filtrovaneData.push_back(buf.data[i]);
+                        }
+
+                        std::string filtrovanyString;
+                        for (size_t i = 0; i < filtrovaneData.size(); ++i) {
+                            filtrovanyString += filtrovaneData[i];
+                        }
+
+                        std::vector<std::string> vyslednyVektorSprav;
+
+                        int end = filtrovanyString.find(";");
+                        while (end != -1) { // Loop until no delimiter is left in the string.
+                            vyslednyVektorSprav.push_back(filtrovanyString.substr(0, end));
+                            filtrovanyString.erase(filtrovanyString.begin(), filtrovanyString.begin() + end + 1);
+                            end = filtrovanyString.find(";");
+                        }
+                        vyslednyVektorSprav.push_back(filtrovanyString.substr(0, end));
+
+                        //spracovavanie spravy, ked klient NIE je prihlaseny
+                        if (currentUser.empty()) {
+                            if (vyslednyVektorSprav[2] == "TRYLOGIN") {
+                                std::cout << "Klient ziada o prihlásenie sa" << std::endl;
+                                std::unique_lock<std::mutex> lock(data->mutex);
+                                bool isLoggedIn = interpreter.tryLogin(vyslednyVektorSprav[3], vyslednyVektorSprav[4]);
+                                lock.unlock();
+                                sleep(1);
+
+                                CHAR_BUFFER bufferPreZapis;
+                                char_buffer_init(&bufferPreZapis);
+                                if (isLoggedIn) {
+                                    char_buffer_append(&bufferPreZapis, "0;0;TRYLOGIN;TRUE", strlen("0;0;TRYLOGIN;TRUE"));
+                                    //POMOCOU TOHTO currentUser SA POSIELAJU SQL PRIKAZY
+                                    currentUser = vyslednyVektorSprav[3];
+                                    password = vyslednyVektorSprav[4];
+                                } else {
+                                    char_buffer_append(&bufferPreZapis, "0;0;TRYLOGIN;FALSE", strlen("0;0;TRYLOGIN;FALSE"));
+                                }
+
+//                                 seedUsersTable(interpreter, currentUser);
+//                                 seedPostsTable(interpreter, currentUser);
+//                                 seedDatatypesTable(interpreter, currentUser);
+
+                                active_socket_write_data(my_socket, &bufferPreZapis);
+                            } else if (vyslednyVektorSprav[2] == "TRYREGISTER") {
+                                std::cout << "Klient ziada o registraciu" << std::endl;
+                                std::unique_lock<std::mutex> lock(data->mutex);
+                                bool successOnRegistration = interpreter.tryRegister(vyslednyVektorSprav[3], vyslednyVektorSprav[4]);
+                                lock.unlock();
+                                sleep(1);
+
+                                CHAR_BUFFER bufferPreZapis;
+                                char_buffer_init(&bufferPreZapis);
+                                if (successOnRegistration) {
+                                    char_buffer_append(&bufferPreZapis, "0;0;TRYREGISTER;TRUE", strlen("0;0;TRYREGISTER;TRUE"));
+                                    //POMOCOU TOHTO currentUser SA POSIELAJU SQL PRIKAZY
+                                    currentUser = vyslednyVektorSprav[3];
+                                    password = vyslednyVektorSprav[4];
+                                } else {
+                                    char_buffer_append(&bufferPreZapis, "0;0;TRYREGISTER;FALSE", strlen("0;0;TRYREGISTER;FALSE"));
+                                }
+
+                                active_socket_write_data(my_socket, &bufferPreZapis);
+                            } else {
+                                std::cout << "Klient poslal nezmysuplnu spravu" << std::endl;
+                            }
+                            //spracovavanie spravy, ked klient JE prihlaseny
+                        } else {
+                            if (vyslednyVektorSprav[2] == "TRYSQL") {
+                                std::cout << "Klient ziada aktivovat SQL prikaz" << std::endl;
+                                std::cout << vyslednyVektorSprav[3] << std::endl;
+                                std::unique_lock<std::mutex> lock(data->mutex);
+                                std::string vysledokSQLString = interpreter.run(vyslednyVektorSprav[3], currentUser);
+                                lock.unlock();
+
+                                CHAR_BUFFER bufferPreZapis;
+                                char_buffer_init(&bufferPreZapis);
+                                const char* vysledokSQL = vysledokSQLString.c_str();
+                                char_buffer_append(&bufferPreZapis, vysledokSQL, strlen(vysledokSQL));
+                                active_socket_write_data(my_socket, &bufferPreZapis);
+                            } else if (vyslednyVektorSprav[2] == "STOPLISTENING") {
+                                if (passive_socket_is_listening(passiveSocket)) {
+                                    passive_socket_stop_listening(passiveSocket);
+                                    passive_socket_destroy(passiveSocket);
+                                    std::cout << "Server prestal prijimat dalsich klientov" << std::endl;
+                                    std::cout << "Server skonci, ked sa vsetci postupne odpoja" << std::endl;
+                                } else {
+                                    std::cout << "Server uz nejaku dobu neprijima dalsich klientov" << std::endl;
+                                }
+                            } else {
+                                std::cout << "Klient poslal nezmysuplnu spravu" << std::endl;
+                            }
+                        }
+                        printf("\n");
+                    }
+                }
+            }
+        }
+    }
+
+    return NULL;
 }
 
 void seedUser(Interpreter& interpreter, std::string user, std::string password) {
