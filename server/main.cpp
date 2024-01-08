@@ -8,15 +8,9 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <bits/stdc++.h>
-
-#ifdef __cplusplus
-extern "C" {
 #include "src/pos_sockets/active_socket.h"
 #include "src/pos_sockets/char_buffer.h"
 #include "src/pos_sockets/passive_socket.h"
-
-}
-#endif
 
 void vypisLogo();
 void seedUser(Interpreter& interpreter, std::string user, std::string password);
