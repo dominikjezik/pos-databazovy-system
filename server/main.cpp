@@ -49,7 +49,7 @@ int main() {
 
     pthread_t th_receive;
     struct thread_data data;
-    thread_data_init(&data, 12730);
+    thread_data_init(&data, 12732);
 
     pthread_create(&th_receive, NULL, process_client_data, &data);
 
@@ -174,6 +174,7 @@ void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SO
 //                                 seedDatatypesTable(interpreter, currentUser);
 
                                 active_socket_write_data(my_socket, &bufferPreZapis);
+                                char_buffer_destroy(&bufferPreZapis);
                             } else if (vyslednyVektorSprav[2] == "TRYREGISTER") {
                                 std::cout << "Klient ziada o registraciu" << std::endl;
                                 std::unique_lock<std::mutex> lock(data->mutex);
@@ -193,6 +194,7 @@ void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SO
                                 }
 
                                 active_socket_write_data(my_socket, &bufferPreZapis);
+                                char_buffer_destroy(&bufferPreZapis);
                             } else {
                                 std::cout << "Klient poslal nezmysuplnu spravu" << std::endl;
                             }
@@ -210,6 +212,7 @@ void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SO
                                 const char* vysledokSQL = vysledokSQLString.c_str();
                                 char_buffer_append(&bufferPreZapis, vysledokSQL, strlen(vysledokSQL));
                                 active_socket_write_data(my_socket, &bufferPreZapis);
+                                char_buffer_destroy(&bufferPreZapis);
                             } else if (vyslednyVektorSprav[2] == "STOPLISTENING") {
                                 if (passive_socket_is_listening(passiveSocket)) {
                                     passive_socket_stop_listening(passiveSocket);
@@ -226,6 +229,7 @@ void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SO
                         printf("\n");
                     }
                 }
+                char_buffer_destroy(&buf);
             }
         }
     }
