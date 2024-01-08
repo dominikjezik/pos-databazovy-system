@@ -8,6 +8,9 @@ add_executable(client main.cpp
         src/sockets/my_socket.cpp
         src/Decoder.cpp
         src/Decoder.h
+        src/ThreadHandler.cpp
+        src/ThreadHandler.h
+        src/MessageBuffer.h
 )
 
 target_link_libraries(client wsock32 ws2_32)
