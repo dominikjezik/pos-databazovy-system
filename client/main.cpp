@@ -12,7 +12,7 @@ void vypisLogo();
 int main() {
     vypisLogo();
 
-    MySocket* mySocket = MySocket::createConnection("frios2.fri.uniza.sk", 12730);
+    MySocket* mySocket = MySocket::createConnection("frios2.fri.uniza.sk", 12732);
     ThreadHandler threadHandler;
     MessageBuffer messageBuffer;
 
