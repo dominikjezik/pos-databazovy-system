@@ -226,6 +226,7 @@ void* process_one_client(void* thread_data, ACTIVE_SOCKET* my_socket, PASSIVE_SO
                         printf("\n");
                     }
                 }
+                char_buffer_destroy(&buf);
             }
         }
     }
